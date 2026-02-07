@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - Payment</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            padding-bottom: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body.light-mode {
+            background: #F5F5F5;
+            color: #1A1A1A;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: #FFFFFF;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .header {
+            background: #FFFFFF;
+            border-bottom-color: #E5E5E5;
+        }
+
+        .payment-methods {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .payment-methods {
+            background: #FFFFFF;
+            border-color: #E5E5E5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .payment-option {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        body.light-mode .payment-option {
+            border-color: #E5E5E5;
+        }
+
+        .payment-option.selected {
+            border-color: #8B5CF6;
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .continue-btn {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: #8B5CF6;
+            color: #FFFFFF;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0 16px;
+            transition: all 0.2s;
+        }
+
+        body.light-mode .continue-btn {
+            background: #000000;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    
+    <div class="header">
+        <button style="background: none; border: none; color: inherit; font-size: 24px;">←</button>
+        <h1 style="font-size: 18px; margin-left: 12px;">Payment</h1>
+    </div>
+
+    <div style="padding: 16px;">
+        <div class="payment-methods">
+            <div class="payment-option selected">
+                <span style="font-size: 32px; margin-right: 12px;">📱</span>
+                <div style="flex: 1;">
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">Pay with M-Pesa</div>
+                    <div style="font-size: 14px; opacity: 0.7;">Enter your M-Pesa PIN on your phone</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="continue-btn">Continue</button>
+
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-mode');
+            document.querySelector('.theme-toggle').innerHTML = isDark ? '🌙' : '☀️';
+        }
+    </script>
+</body>
+</html>

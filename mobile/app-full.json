@@ -1,0 +1,73 @@
+{
+  "expo": {
+    "name": "T-Plat",
+    "slug": "t-plat",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tplat.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "T-Plat needs your location to show nearby events.",
+        "NSLocationAlwaysUsageDescription": "T-Plat needs your location to show nearby events.",
+        "NSCameraUsageDescription": "T-Plat needs camera access to scan QR codes for check-in.",
+        "NSPhotoLibraryUsageDescription": "T-Plat needs photo library access to upload event images."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.tplat.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow T-Plat to use your location to show nearby events."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow T-Plat to access your camera to scan QR codes."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#000000",
+          "sounds": ["./assets/notification-sound.wav"]
+        }
+      ]
+    ],
+    "scheme": "tplat",
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}

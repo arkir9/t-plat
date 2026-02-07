@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - Welcome</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 60px 16px 40px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body.light-mode {
+            background: linear-gradient(180deg, #FFFFFF 0%, #F5F5F5 100%);
+            color: #1A1A1A;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: #FFFFFF;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
+        }
+
+        .logo {
+            font-size: 60px;
+            font-weight: 300;
+            font-style: italic;
+            letter-spacing: 2px;
+            color: #FFFFFF;
+            margin-top: 40px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .logo {
+            color: #000000;
+        }
+
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .hero-text {
+            font-size: 32px;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-bottom: 16px;
+            line-height: 40px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .hero-text {
+            color: #000000;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 24px;
+            margin-bottom: 60px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .subtitle {
+            color: #666666;
+        }
+
+        .button-container {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            height: 56px;
+            background: #8B5CF6;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        body.light-mode .btn-primary {
+            background: #000000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+            opacity: 0.9;
+        }
+
+        .link-secondary {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            text-decoration: none;
+            text-align: center;
+            display: block;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .link-secondary {
+            color: #666666;
+        }
+
+        .link-secondary:hover {
+            color: #8B5CF6;
+        }
+
+        body.light-mode .link-secondary:hover {
+            color: #000000;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    <div class="logo">plat</div>
+    <div class="content">
+        <h1 class="hero-text">Discover Events<br>Near You</h1>
+        <p class="subtitle">Find and book tickets to the best events in Nairobi</p>
+    </div>
+    <div class="button-container">
+        <button class="btn-primary">Get Started</button>
+        <a href="#" class="link-secondary">Already have an account? Sign In</a>
+    </div>
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-mode');
+            document.querySelector('.theme-toggle').innerHTML = isDark ? '🌙' : '☀️';
+        }
+    </script>
+</body>
+</html>

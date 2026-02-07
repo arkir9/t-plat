@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - Home</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            padding-bottom: 80px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body.light-mode {
+            background: #F5F5F5;
+            color: #1A1A1A;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: #FFFFFF;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .header {
+            background: #FFFFFF;
+            border-bottom-color: #E5E5E5;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: 300;
+            font-style: italic;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .logo {
+            color: #000000;
+        }
+
+        .location {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .location {
+            color: #666666;
+        }
+
+        .search-icon {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .search-bar {
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            transition: background 0.3s;
+        }
+
+        body.light-mode .search-bar {
+            background: #FFFFFF;
+        }
+
+        .search-input {
+            width: 100%;
+            height: 48px;
+            padding: 0 16px 0 48px;
+            border: none;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+            color: #FFFFFF;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .search-input {
+            background: #F5F5F5;
+            color: #1A1A1A;
+        }
+
+        .search-input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid #8B5CF6;
+        }
+
+        body.light-mode .search-input:focus {
+            background: #FFFFFF;
+        }
+
+        .search-wrapper {
+            position: relative;
+        }
+
+        .search-icon-left {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        body.light-mode .search-icon-left {
+            color: #999999;
+        }
+
+        .filter-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+        }
+
+        body.light-mode .filter-icon {
+            color: #999999;
+        }
+
+        .filters {
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            transition: background 0.3s;
+        }
+
+        body.light-mode .filters {
+            background: #FFFFFF;
+        }
+
+        .filter-chip {
+            padding: 8px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        body.light-mode .filter-chip {
+            background: #E5E5E5;
+            color: #1A1A1A;
+        }
+
+        .filter-chip.active {
+            background: #8B5CF6;
+            color: #FFFFFF;
+        }
+
+        .view-toggle {
+            padding: 12px 16px;
+            display: flex;
+            justify-content: flex-end;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            transition: background 0.3s;
+        }
+
+        body.light-mode .view-toggle {
+            background: #FFFFFF;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            color: #FFFFFF;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .toggle-btn {
+            background: #F5F5F5;
+            border-color: #E5E5E5;
+            color: #1A1A1A;
+        }
+
+        .event-list {
+            padding: 12px 16px;
+        }
+
+        .event-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-bottom: 12px;
+            display: flex;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        body.light-mode .event-card {
+            background: #FFFFFF;
+            border-color: #E5E5E5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .event-card:active {
+            transform: scale(0.98);
+        }
+
+        .event-image {
+            width: 120px;
+            height: 140px;
+            object-fit: cover;
+            background: linear-gradient(135deg, #8B5CF6 0%, #000000 100%);
+        }
+
+        .event-content {
+            flex: 1;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .event-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-bottom: 8px;
+            line-height: 22px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .event-title {
+            color: #000000;
+        }
+
+        .event-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .meta-item {
+            color: #666666;
+        }
+
+        .event-price {
+            font-size: 16px;
+            font-weight: 700;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .event-price {
+            color: #000000;
+        }
+
+        .organizer-name {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 4px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .organizer-name {
+            color: #999999;
+        }
+
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            height: 60px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 8px 0;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .tab-bar {
+            background: #FFFFFF;
+            border-top-color: #E5E5E5;
+        }
+
+        .tab-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .tab-icon {
+            width: 24px;
+            height: 24px;
+            color: rgba(255, 255, 255, 0.6);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .tab-icon {
+            color: #999999;
+        }
+
+        .tab-item.active .tab-icon {
+            color: #8B5CF6;
+        }
+
+        .tab-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .tab-label {
+            color: #999999;
+        }
+
+        .tab-item.active .tab-label {
+            color: #8B5CF6;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+
+    <div class="header">
+        <div class="logo">plat</div>
+        <div class="location">📍 Nairobi, Kenya</div>
+        <div class="search-icon">🔍</div>
+    </div>
+
+    <div class="search-bar">
+        <div class="search-wrapper">
+            <span class="search-icon-left">🔍</span>
+            <input type="text" class="search-input" placeholder="Search events, venues, organizers...">
+            <span class="filter-icon">⚙️</span>
+        </div>
+    </div>
+
+    <div class="filters">
+        <button class="filter-chip active">Today</button>
+        <button class="filter-chip">This Weekend</button>
+        <button class="filter-chip">This Month</button>
+        <button class="filter-chip">Free Events</button>
+        <button class="filter-chip">Music</button>
+        <button class="filter-chip">Sports</button>
+        <button class="filter-chip">Nightlife</button>
+    </div>
+
+    <div class="view-toggle">
+        <button class="toggle-btn">🗺️ Map View</button>
+    </div>
+
+    <div class="event-list">
+        <div class="event-card">
+            <div class="event-image"></div>
+            <div class="event-content">
+                <div>
+                    <h3 class="event-title">Nairobi Music Festival 2024</h3>
+                    <div class="event-meta">
+                        <div class="meta-item">📅 Today, 7:00 PM</div>
+                        <div class="meta-item">📍 Kasarani Stadium</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="event-price">From KES 1,500</div>
+                    <div class="organizer-name">by Nairobi Events Co.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-image"></div>
+            <div class="event-content">
+                <div>
+                    <h3 class="event-title">Weekend Jazz Night</h3>
+                    <div class="event-meta">
+                        <div class="meta-item">📅 Tomorrow, 8:00 PM</div>
+                        <div class="meta-item">📍 The Alchemist Bar</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="event-price">From KES 800</div>
+                    <div class="organizer-name">by Jazz Nairobi</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-image"></div>
+            <div class="event-content">
+                <div>
+                    <h3 class="event-title">Football Match: Gor Mahia vs AFC</h3>
+                    <div class="event-meta">
+                        <div class="meta-item">📅 Saturday, 3:00 PM</div>
+                        <div class="meta-item">📍 Nyayo Stadium</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="event-price">From KES 500</div>
+                    <div class="organizer-name">by KPL Events</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="event-card">
+            <div class="event-image"></div>
+            <div class="event-content">
+                <div>
+                    <h3 class="event-title">Art Exhibition Opening</h3>
+                    <div class="event-meta">
+                        <div class="meta-item">📅 Sunday, 2:00 PM</div>
+                        <div class="meta-item">📍 Nairobi Gallery</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="event-price">Free</div>
+                    <div class="organizer-name">by Art Nairobi</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-bar">
+        <div class="tab-item active">
+            <div class="tab-icon">🏠</div>
+            <div class="tab-label">Home</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">🗺️</div>
+            <div class="tab-label">Map</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">🎫</div>
+            <div class="tab-label">Tickets</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">❤️</div>
+            <div class="tab-label">Favorites</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">👤</div>
+            <div class="tab-label">Profile</div>
+        </div>
+    </div>
+
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-mode');
+            document.querySelector('.theme-toggle').innerHTML = isDark ? '🌙' : '☀️';
+        }
+    </script>
+</body>
+</html>

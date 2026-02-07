@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - Sign Up</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            min-height: 100vh;
+            padding: 20px 16px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body.light-mode {
+            background: #FFFFFF;
+            color: #1A1A1A;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: #FFFFFF;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            font-size: 24px;
+            cursor: pointer;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .back-btn {
+            color: #000000;
+        }
+
+        .logo {
+            font-size: 32px;
+            font-weight: 300;
+            font-style: italic;
+            margin-left: 12px;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .logo {
+            color: #000000;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 32px;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .title {
+            color: #1A1A1A;
+        }
+
+        .form {
+            max-width: 400px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .form-label {
+            color: #1A1A1A;
+        }
+
+        .form-input {
+            width: 100%;
+            height: 48px;
+            padding: 0 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #FFFFFF;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .form-input {
+            background: #FFFFFF;
+            border-color: #E5E5E5;
+            color: #1A1A1A;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border: 2px solid #8B5CF6;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        body.light-mode .form-input:focus {
+            background: #FFFFFF;
+        }
+
+        .form-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        body.light-mode .form-input::placeholder {
+            color: #999999;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            margin: 24px 0;
+        }
+
+        .checkbox {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            margin-top: 2px;
+        }
+
+        .checkbox-label {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 20px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .checkbox-label {
+            color: #666666;
+        }
+
+        .checkbox-label a {
+            color: #8B5CF6;
+            text-decoration: none;
+        }
+
+        .social-buttons {
+            margin-bottom: 24px;
+        }
+
+        .btn-social {
+            width: 100%;
+            height: 48px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+            color: #FFFFFF;
+        }
+
+        body.light-mode .btn-social {
+            background: #FFFFFF;
+            border-color: #E5E5E5;
+            color: #1A1A1A;
+        }
+
+        .btn-social:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        body.light-mode .btn-social:active {
+            background: #F5F5F5;
+        }
+
+        .btn-primary {
+            width: 100%;
+            height: 56px;
+            background: #8B5CF6;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        body.light-mode .btn-primary {
+            background: #000000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-primary:disabled {
+            background: rgba(255, 255, 255, 0.2);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        body.light-mode .btn-primary:disabled {
+            background: #CCCCCC;
+        }
+
+        .footer-link {
+            text-align: center;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .footer-link {
+            color: #666666;
+        }
+
+        .footer-link a {
+            color: #8B5CF6;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    <div class="header">
+        <button class="back-btn">←</button>
+        <div class="logo">plat</div>
+    </div>
+
+    <div class="form">
+        <h1 class="title">Create Your Account</h1>
+
+        <div class="social-buttons">
+            <button class="btn-social">
+                <span>🔍</span> Continue with Google
+            </button>
+            <button class="btn-social">
+                <span>🍎</span> Continue with Apple
+            </button>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">First Name</label>
+            <input type="text" class="form-input" placeholder="Enter your first name">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Last Name</label>
+            <input type="text" class="form-input" placeholder="Enter your last name">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" placeholder="Enter your email">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Phone Number</label>
+            <input type="tel" class="form-input" placeholder="+254 7XX XXX XXX">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" placeholder="Create a password">
+        </div>
+
+        <div class="checkbox-group">
+            <input type="checkbox" class="checkbox" id="terms">
+            <label for="terms" class="checkbox-label">
+                I agree to <a href="#">Terms & Conditions</a>
+            </label>
+        </div>
+
+        <button class="btn-primary">Sign Up</button>
+
+        <p class="footer-link">
+            Already have an account? <a href="#">Sign In</a>
+        </p>
+    </div>
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-mode');
+            document.querySelector('.theme-toggle').innerHTML = isDark ? '🌙' : '☀️';
+        }
+    </script>
+</body>
+</html>

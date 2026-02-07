@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["dist/*"],
+      "@/common/*": ["dist/common/*"],
+      "@/config/*": ["dist/config/*"],
+      "@/modules/*": ["dist/modules/*"]
+    }
+  }
+}

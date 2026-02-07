@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - Filters</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            min-height: 100vh;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body.light-mode {
+            background: #F5F5F5;
+            color: #1A1A1A;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: #FFFFFF;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .header {
+            background: #FFFFFF;
+            border-bottom-color: #E5E5E5;
+        }
+
+        .header-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .header-title {
+            color: #1A1A1A;
+        }
+
+        .filter-section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 16px;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .filter-section {
+            background: #FFFFFF;
+            border-color: #E5E5E5;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .section-title {
+            color: #1A1A1A;
+        }
+
+        .date-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 8px;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .date-option {
+            background: #F5F5F5;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+        }
+
+        .checkbox-label {
+            font-size: 16px;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .checkbox-label {
+            color: #1A1A1A;
+        }
+
+        .price-chip {
+            padding: 8px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            cursor: pointer;
+            margin: 4px;
+            color: #FFFFFF;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .price-chip {
+            background: #E5E5E5;
+            color: #1A1A1A;
+        }
+
+        .price-chip.active {
+            background: #8B5CF6;
+            color: #FFFFFF;
+        }
+
+        .apply-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .apply-bar {
+            background: #FFFFFF;
+            border-top-color: #E5E5E5;
+        }
+
+        .apply-btn {
+            flex: 2;
+            height: 48px;
+            background: #8B5CF6;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #FFFFFF;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        }
+
+        body.light-mode .apply-btn {
+            background: #000000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    
+    <div class="header">
+        <button style="background: none; border: none; color: inherit; font-size: 24px;">✕</button>
+        <h1 class="header-title">Filters</h1>
+        <button style="background: none; border: none; color: #8B5CF6; font-size: 14px;">Clear All</button>
+    </div>
+
+    <div style="padding-bottom: 100px;">
+        <div class="filter-section">
+            <h2 class="section-title">Event Type</h2>
+            <div class="checkbox-item">
+                <input type="checkbox" checked style="width: 20px; height: 20px;">
+                <span class="checkbox-label">Music</span>
+            </div>
+            <div class="checkbox-item">
+                <input type="checkbox" style="width: 20px; height: 20px;">
+                <span class="checkbox-label">Sports</span>
+            </div>
+            <div class="checkbox-item">
+                <input type="checkbox" checked style="width: 20px; height: 20px;">
+                <span class="checkbox-label">Nightlife</span>
+            </div>
+        </div>
+
+        <div class="filter-section">
+            <h2 class="section-title">Price Range</h2>
+            <div style="display: flex; flex-wrap: wrap;">
+                <button class="price-chip active">Free</button>
+                <button class="price-chip">Under KES 500</button>
+                <button class="price-chip">KES 500-2,000</button>
+                <button class="price-chip">KES 2,000+</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="apply-bar">
+        <button style="flex: 1; height: 48px; background: rgba(255,255,255,0.1); border: none; border-radius: 8px; color: inherit;">Reset</button>
+        <button class="apply-btn">Apply (5 filters)</button>
+    </div>
+
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-mode');
+            document.querySelector('.theme-toggle').innerHTML = isDark ? '🌙' : '☀️';
+        }
+    </script>
+</body>
+</html>

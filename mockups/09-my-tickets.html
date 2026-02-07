@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - My Tickets</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            padding-bottom: 80px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        body.light-mode {
+            background: #F5F5F5;
+            color: #1A1A1A;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            color: #FFFFFF;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 1000;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .theme-toggle {
+            background: rgba(0, 0, 0, 0.1);
+            color: #000000;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .header {
+            background: #FFFFFF;
+            border-bottom-color: #E5E5E5;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .header-title {
+            color: #1A1A1A;
+        }
+
+        .tabs {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        body.light-mode .tabs {
+            background: #FFFFFF;
+            border-bottom-color: #E5E5E5;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 16px;
+            text-align: center;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .tab {
+            color: #999999;
+        }
+
+        .tab.active {
+            color: #FFFFFF;
+            border-bottom-color: #8B5CF6;
+        }
+
+        body.light-mode .tab.active {
+            color: #000000;
+        }
+
+        .ticket-list {
+            padding: 16px;
+        }
+
+        .ticket-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        body.light-mode .ticket-card {
+            background: #FFFFFF;
+            border-color: #E5E5E5;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .ticket-card:active {
+            transform: scale(0.98);
+        }
+
+        .ticket-image {
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #8B5CF6 0%, #000000 100%);
+            flex-shrink: 0;
+        }
+
+        .ticket-info {
+            flex: 1;
+        }
+
+        .ticket-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #FFFFFF;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .ticket-title {
+            color: #1A1A1A;
+        }
+
+        .ticket-meta {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 4px;
+            transition: color 0.3s;
+        }
+
+        body.light-mode .ticket-meta {
+            color: #666666;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background: #10B981;
+            color: #FFFFFF;
+        }
+
+        .status-used {
+            background: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        body.light-mode .status-used {
+            background: #E5E5E5;
+            color: #666666;
+        }
+
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            height: 60px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 8px 0;
+            transition: all 0.3s;
+        }
+
+        body.light-mode .tab-bar {
+            background: #FFFFFF;
+            border-top-color: #E5E5E5;
+        }
+
+        .tab-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .tab-icon {
+            width: 24px;
+            height: 24px;
+            color: rgba(255, 255, 255, 0.6);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .tab-icon {
+            color: #999999;
+        }
+
+        .tab-item.active .tab-icon {
+            color: #8B5CF6;
+        }
+
+        .tab-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            transition: color 0.3s;
+        }
+
+        body.light-mode .tab-label {
+            color: #999999;
+        }
+
+        .tab-item.active .tab-label {
+            color: #8B5CF6;
+        }
+    </style>
+</head>
+<body>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+    
+    <div class="header">
+        <h1 class="header-title">My Tickets</h1>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active">Upcoming</button>
+        <button class="tab">Past</button>
+    </div>
+
+    <div class="ticket-list">
+        <div class="ticket-card">
+            <div class="ticket-image"></div>
+            <div class="ticket-info">
+                <h3 class="ticket-title">Nairobi Music Festival</h3>
+                <div class="ticket-meta">📅 Today, 7:00 PM</div>
+                <div class="ticket-meta">📍 Kasarani Stadium</div>
+                <div class="ticket-meta">2x General Admission</div>
+                <span class="status-badge status-active">Active</span>
+            </div>
+        </div>
+
+        <div class="ticket-card">
+            <div class="ticket-image"></div>
+            <div class="ticket-info">
+                <h3 class="ticket-title">Weekend Jazz Night</h3>
+                <div class="ticket-meta">📅 Tomorrow, 8:00 PM</div>
+                <div class="ticket-meta">📍 The Alchemist Bar</div>
+                <div class="ticket-meta">1x General Admission</div>
+                <span class="status-badge status-active">Active</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-bar">
+        <div class="tab-item">
+            <div class="tab-icon">🏠</div>
+            <div class="tab-label">Home</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">🗺️</div>
+            <div class="tab-label">Map</div>
+        </div>
+        <div class="tab-item active">
+            <div class="tab-icon">🎫</div>
+            <div class="tab-label">Tickets</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">❤️</div>
+            <div class="tab-label">Favorites</div>
+        </div>
+        <div class="tab-item">
+            <div class="tab-icon">👤</div>
+            <div class="tab-label">Profile</div>
+        </div>
+    </div>
+
+    <script>
+        let isDark = true;
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-mode');
+            document.querySelector('.theme-toggle').innerHTML = isDark ? '🌙' : '☀️';
+        }
+    </script>
+</body>
+</html>

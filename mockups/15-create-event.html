@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>plat - Create Event</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #000000;
+            color: #FFFFFF;
+            padding-bottom: 100px;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            font-size: 24px;
+            cursor: pointer;
+            color: #FFFFFF;
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-left: 12px;
+        }
+
+        .content {
+            padding: 24px 16px;
+        }
+
+        .form-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #FFFFFF;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #CCCCCC;
+            margin-bottom: 8px;
+        }
+
+        .form-input, .form-textarea {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-size: 16px;
+            color: #FFFFFF;
+            font-family: inherit;
+        }
+
+        .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #8B5CF6;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-input::placeholder, .form-textarea::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .image-upload {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+
+        .image-preview {
+            width: 120px;
+            height: 120px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .add-image {
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .location-toggle {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+
+        .toggle-option {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .toggle-option.active {
+            background: #8B5CF6;
+            color: #FFFFFF;
+        }
+
+        .toggle-option:not(.active) {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .ticket-type-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .ticket-name-input {
+            flex: 1;
+            margin-right: 12px;
+        }
+
+        .delete-ticket {
+            width: 36px;
+            height: 36px;
+            background: rgba(239, 68, 68, 0.2);
+            border: none;
+            border-radius: 8px;
+            color: #EF4444;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .add-ticket-btn {
+            width: 100%;
+            height: 48px;
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px dashed #8B5CF6;
+            border-radius: 8px;
+            color: #8B5CF6;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 12px;
+        }
+
+        .publish-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+
+        .toggle-switch {
+            width: 48px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #8B5CF6;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: #FFFFFF;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(20px);
+        }
+
+        .save-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.95);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-draft {
+            flex: 1;
+            height: 56px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-publish {
+            flex: 2;
+            height: 56px;
+            background: #8B5CF6;
+            border: none;
+            border-radius: 8px;
+            color: #FFFFFF;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn">←</button>
+        <h1 class="header-title">Create Event</h1>
+    </div>
+
+    <div class="content">
+        <div class="form-section">
+            <h2 class="section-title">Basic Information</h2>
+            <div class="form-group">
+                <label class="form-label">Event Title</label>
+                <input type="text" class="form-input" placeholder="Enter event title">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" placeholder="Describe your event..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Category</label>
+                <select class="form-input">
+                    <option>Music</option>
+                    <option>Sports</option>
+                    <option>Comedy</option>
+                    <option>Food & Drink</option>
+                    <option>Nightlife</option>
+                    <option>Arts</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Event Images</label>
+                <div class="image-upload">
+                    <div class="image-preview">
+                        <span class="add-image">+</span>
+                    </div>
+                    <div class="image-preview">
+                        <span class="add-image">+</span>
+                    </div>
+                    <div class="image-preview">
+                        <span class="add-image">+</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2 class="section-title">Date & Time</h2>
+            <div class="form-group">
+                <label class="form-label">Start Date & Time</label>
+                <input type="datetime-local" class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label">End Date & Time</label>
+                <input type="datetime-local" class="form-input">
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2 class="section-title">Location</h2>
+            <div class="location-toggle">
+                <div class="toggle-option active">Venue</div>
+                <div class="toggle-option">Custom Location</div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Select Venue</label>
+                <input type="text" class="form-input" placeholder="Search venues...">
+            </div>
+        </div>
+
+        <div class="form-section">
+            <h2 class="section-title">Ticket Types</h2>
+            <div class="ticket-type-card">
+                <div class="ticket-header">
+                    <input type="text" class="form-input ticket-name-input" placeholder="Ticket name" value="General Admission">
+                    <button class="delete-ticket">×</button>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Price (KES)</label>
+                    <input type="number" class="form-input" placeholder="0" value="1500">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quantity Available</label>
+                    <input type="number" class="form-input" placeholder="0" value="100">
+                </div>
+            </div>
+            <button class="add-ticket-btn">+ Add Ticket Type</button>
+        </div>
+
+        <div class="publish-toggle">
+            <div>
+                <div style="font-weight: 600; margin-bottom: 4px;">Publish Immediately</div>
+                <div style="font-size: 12px; color: rgba(255,255,255,0.6);">Event will be visible to users right away</div>
+            </div>
+            <div class="toggle-switch active"></div>
+        </div>
+    </div>
+
+    <div class="save-bar">
+        <button class="btn-draft">Save Draft</button>
+        <button class="btn-publish">Publish Event</button>
+    </div>
+</body>
+</html>

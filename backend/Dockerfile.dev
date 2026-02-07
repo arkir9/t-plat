@@ -1,0 +1,26 @@
+# Development Dockerfile for T-Plat Backend
+FROM node:20-alpine
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm install
+
+# Copy source so image has tsconfig.json, run-dev.js, src/ (volumes can override for hot reload)
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Run from /app so process.cwd() is /app and Nest finds tsconfig.json (works with volume mount)
+CMD ["sh", "-c", "cd /app && exec npm run start:dev"]

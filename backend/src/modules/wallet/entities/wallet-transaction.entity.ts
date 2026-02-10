@@ -12,6 +12,8 @@ import { WalletAccount } from './wallet-account.entity';
 export enum WalletTransactionType {
   CREDIT = 'credit',
   DEBIT = 'debit',
+  WITHDRAWAL = 'withdrawal',
+  TICKET_SALE = 'ticket_sale',
 }
 
 @Entity('wallet_transactions')
@@ -46,4 +48,3 @@ export class WalletTransaction {
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }
-

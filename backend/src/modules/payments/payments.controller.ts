@@ -10,13 +10,8 @@ import {
   HttpStatus,
   RawBodyRequest,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-} from '@nestjs/swagger';
+import { Request } from 'express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { CreateStripePaymentDto, CreateMpesaPaymentDto, RefundPaymentDto } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -38,10 +33,7 @@ export class PaymentsController {
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Order not found' })
-  async createStripePayment(
-    @CurrentUser() user: User,
-    @Body() createDto: CreateStripePaymentDto,
-  ) {
+  async createStripePayment(@CurrentUser() user: User, @Body() createDto: CreateStripePaymentDto) {
     return this.paymentsService.createStripePayment(user.id, createDto);
   }
 
@@ -54,10 +46,7 @@ export class PaymentsController {
   @ApiResponse({ status: 400, description: 'Bad request' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Order not found' })
-  async createMpesaPayment(
-    @CurrentUser() user: User,
-    @Body() createDto: CreateMpesaPaymentDto,
-  ) {
+  async createMpesaPayment(@CurrentUser() user: User, @Body() createDto: CreateMpesaPaymentDto) {
     return this.paymentsService.createMpesaPayment(user.id, createDto);
   }
 
@@ -77,7 +66,7 @@ export class PaymentsController {
   @ApiResponse({ status: 200, description: 'Webhook processed successfully' })
   async handleStripeWebhook(@Req() req: RawBodyRequest<Request>) {
     const signature = req.headers['stripe-signature'] as string;
-    const payload = req.rawBody as Buffer;
+    const payload = req.rawBody ?? Buffer.from('');
     return this.paymentsService.handleStripeWebhook(signature, payload);
   }
 

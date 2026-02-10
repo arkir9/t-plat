@@ -9,13 +9,7 @@ import {
   HttpStatus,
   Delete,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { TicketsService } from './tickets.service';
 import {
   CreateTicketTypeDto,
@@ -71,10 +65,7 @@ export class TicketsController {
   @ApiResponse({ status: 400, description: 'Bad request - validation failed' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Event or ticket type not found' })
-  async createOrder(
-    @CurrentUser() user: User,
-    @Body() createOrderDto: CreateOrderDto,
-  ) {
+  async createOrder(@CurrentUser() user: User, @Body() createOrderDto: CreateOrderDto) {
     return this.ticketsService.createOrder(user.id, createOrderDto);
   }
 
@@ -146,10 +137,7 @@ export class TicketsController {
   @ApiResponse({ status: 400, description: 'Bad request - already on waitlist' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Event not found' })
-  async joinWaitlist(
-    @CurrentUser() user: User,
-    @Body() waitlistDto: JoinWaitlistDto,
-  ) {
+  async joinWaitlist(@CurrentUser() user: User, @Body() waitlistDto: JoinWaitlistDto) {
     return this.ticketsService.joinWaitlist(user.id, waitlistDto);
   }
 

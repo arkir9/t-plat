@@ -10,13 +10,7 @@ import { Ticket } from '../tickets/entities/ticket.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      EmergencyContact,
-      EventCheckIn,
-      SafetyReport,
-      Event,
-      Ticket,
-    ]),
+    TypeOrmModule.forFeature([EmergencyContact, EventCheckIn, SafetyReport, Event, Ticket]),
   ],
   controllers: [SafetyController],
   providers: [SafetyService],

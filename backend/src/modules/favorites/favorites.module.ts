@@ -6,10 +6,7 @@ import { FavoritesController } from './favorites.controller';
 import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Favorite]),
-    EventsModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Favorite]), EventsModule],
   controllers: [FavoritesController],
   providers: [FavoritesService],
   exports: [FavoritesService],

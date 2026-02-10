@@ -47,6 +47,8 @@ export const ProfileScreen = () => {
     try {
       const profileData = await authService.getProfile();
       setProfile(profileData);
+      // Keep auth store in sync (e.g. role after creating organizer profile)
+      useAuthStore.getState().updateUser(profileData);
     } catch (error) {
       console.error('Failed to load profile:', error);
     } finally {

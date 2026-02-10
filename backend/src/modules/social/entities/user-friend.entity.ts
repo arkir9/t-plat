@@ -43,4 +43,3 @@ export class UserFriend {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

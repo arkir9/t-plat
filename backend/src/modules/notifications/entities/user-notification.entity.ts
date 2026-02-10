@@ -55,4 +55,3 @@ export class UserNotification {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

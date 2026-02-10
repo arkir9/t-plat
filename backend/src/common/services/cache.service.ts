@@ -22,11 +22,7 @@ export class CacheService {
     await this.cacheManager.reset();
   }
 
-  async wrap<T>(
-    key: string,
-    fn: () => Promise<T>,
-    ttl?: number,
-  ): Promise<T> {
+  async wrap<T>(key: string, fn: () => Promise<T>, ttl?: number): Promise<T> {
     return this.cacheManager.wrap(key, fn, ttl);
   }
 }

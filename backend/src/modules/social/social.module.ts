@@ -10,4 +10,3 @@ import { SocialService } from './social.service';
   exports: [SocialService],
 })
 export class SocialModule {}
-

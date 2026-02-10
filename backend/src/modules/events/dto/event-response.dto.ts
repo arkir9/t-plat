@@ -1,150 +1,162 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EventStatus, LocationType, VenueFeeType, CustomLocation } from '../entities/event.entity';
+import {
+  EventStatus,
+  LocationType,
+  VenueFeeType,
+  CustomLocation,
+  EventSource,
+} from '../entities/event.entity';
 
 export class EventResponseDto {
-    @ApiProperty()
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  organizerId: string;
+
+  @ApiPropertyOptional()
+  source?: EventSource;
+
+  @ApiPropertyOptional()
+  isClaimed?: boolean;
+
+  @ApiPropertyOptional()
+  externalUrl?: string;
+
+  @ApiProperty()
+  organizer: {
     id: string;
+    name: string;
+    profileImageUrl?: string;
+    isVerified: boolean;
+  };
 
-    @ApiProperty()
-    organizerId: string;
+  @ApiPropertyOptional()
+  venueId?: string;
 
-    @ApiProperty()
-    organizer: {
-        id: string;
-        name: string;
-        profileImageUrl?: string;
-        isVerified: boolean;
-    };
+  @ApiPropertyOptional()
+  venue?: {
+    id: string;
+    name: string;
+    profileImageUrl?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+  };
 
-    @ApiPropertyOptional()
-    venueId?: string;
+  @ApiProperty()
+  title: string;
 
-    @ApiPropertyOptional()
-    venue?: {
-        id: string;
-        name: string;
-        profileImageUrl?: string;
-        address?: string;
-        city?: string;
-        country?: string;
-    };
+  @ApiPropertyOptional()
+  description?: string;
 
-    @ApiProperty()
-    title: string;
+  @ApiPropertyOptional()
+  eventType?: string;
 
-    @ApiPropertyOptional()
-    description?: string;
+  @ApiPropertyOptional()
+  category?: string;
 
-    @ApiPropertyOptional()
-    eventType?: string;
+  @ApiProperty()
+  startDate: Date;
 
-    @ApiPropertyOptional()
-    category?: string;
+  @ApiProperty()
+  endDate: Date;
 
-    @ApiProperty()
-    startDate: Date;
+  @ApiProperty()
+  timezone: string;
 
-    @ApiProperty()
-    endDate: Date;
+  @ApiProperty({ enum: LocationType })
+  locationType: LocationType;
 
-    @ApiProperty()
-    timezone: string;
+  @ApiPropertyOptional()
+  customLocation?: CustomLocation;
 
-    @ApiProperty({ enum: LocationType })
-    locationType: LocationType;
+  @ApiPropertyOptional({ type: [String] })
+  images?: string[];
 
-    @ApiPropertyOptional()
-    customLocation?: CustomLocation;
+  @ApiPropertyOptional()
+  videoUrl?: string;
 
-    @ApiPropertyOptional({ type: [String] })
-    images?: string[];
+  @ApiPropertyOptional()
+  ageRestriction?: string;
 
-    @ApiPropertyOptional()
-    videoUrl?: string;
+  @ApiPropertyOptional()
+  dressCode?: string;
 
-    @ApiPropertyOptional()
-    ageRestriction?: string;
+  @ApiPropertyOptional()
+  maxTicketsPerUser?: number;
 
-    @ApiPropertyOptional()
-    dressCode?: string;
+  @ApiPropertyOptional()
+  venueFeePercentage?: number;
 
-    @ApiPropertyOptional()
-    maxTicketsPerUser?: number;
+  @ApiPropertyOptional()
+  venueFeeAmount?: number;
 
-    @ApiPropertyOptional()
-    venueFeePercentage?: number;
+  @ApiPropertyOptional({ enum: VenueFeeType })
+  venueFeeType?: VenueFeeType;
 
-    @ApiPropertyOptional()
-    venueFeeAmount?: number;
+  @ApiProperty({ enum: EventStatus })
+  status: EventStatus;
 
-    @ApiPropertyOptional({ enum: VenueFeeType })
-    venueFeeType?: VenueFeeType;
+  @ApiProperty()
+  isFeatured: boolean;
 
-    @ApiProperty({ enum: EventStatus })
-    status: EventStatus;
+  @ApiProperty()
+  isSponsored: boolean;
 
-    @ApiProperty()
-    isFeatured: boolean;
+  @ApiPropertyOptional()
+  sponsorName?: string;
 
-    @ApiProperty()
-    isSponsored: boolean;
+  @ApiPropertyOptional()
+  bannerImageUrl?: string;
 
-    @ApiPropertyOptional()
-    sponsorName?: string;
+  @ApiPropertyOptional()
+  publishDate?: Date;
 
-    @ApiPropertyOptional()
-    bannerImageUrl?: string;
+  @ApiPropertyOptional({ type: [String] })
+  tags?: string[];
 
-    @ApiPropertyOptional()
-    publishDate?: Date;
+  @ApiPropertyOptional()
+  contactInfo?: {
+    email?: string;
+    phone?: string;
+    website?: string;
+  };
 
-    @ApiPropertyOptional({ type: [String] })
-    tags?: string[];
+  @ApiPropertyOptional()
+  requirements?: {
+    items?: string[];
+    notes?: string;
+  };
 
-    @ApiPropertyOptional()
-    externalUrl?: string;
+  @ApiProperty()
+  createdAt: Date;
 
-    @ApiPropertyOptional()
-    contactInfo?: {
-        email?: string;
-        phone?: string;
-        website?: string;
-    };
+  @ApiProperty()
+  updatedAt: Date;
 
-    @ApiPropertyOptional()
-    requirements?: {
-        items?: string[];
-        notes?: string;
-    };
+  // Additional computed fields
+  @ApiPropertyOptional()
+  isActive?: boolean;
 
-    @ApiProperty()
-    createdAt: Date;
+  @ApiPropertyOptional()
+  isPast?: boolean;
 
-    @ApiProperty()
-    updatedAt: Date;
+  @ApiPropertyOptional()
+  isUpcoming?: boolean;
 
-    // Additional computed fields
-    @ApiPropertyOptional()
-    isActive?: boolean;
+  @ApiPropertyOptional()
+  ticketsSold?: number;
 
-    @ApiPropertyOptional()
-    isPast?: boolean;
+  @ApiPropertyOptional()
+  revenue?: number;
 
-    @ApiPropertyOptional()
-    isUpcoming?: boolean;
+  @ApiPropertyOptional()
+  capacity?: number;
 
-    @ApiPropertyOptional()
-    ticketsSold?: number;
+  @ApiPropertyOptional()
+  availableTickets?: number;
 
-    @ApiPropertyOptional()
-    revenue?: number;
-
-    @ApiPropertyOptional()
-    capacity?: number;
-
-    @ApiPropertyOptional()
-    availableTickets?: number;
-
-    @ApiPropertyOptional()
-    distance?: number; // Distance in km for location-based searches
+  @ApiPropertyOptional()
+  distance?: number; // Distance in km for location-based searches
 }

@@ -8,7 +8,14 @@ import {
   FlatList,
   ActivityIndicator,
 } from 'react-native';
-import { ChevronLeft, Calendar, MapPin, Plus } from 'lucide-react-native';
+import { 
+    ChevronLeft, 
+    Calendar, 
+    MapPin, 
+    Plus, 
+    Globe, // New Import
+    CheckCircle // New Import
+} from 'lucide-react-native';
 import { eventsService, Event } from '../../services/eventsService';
 import { format } from 'date-fns';
 
@@ -19,6 +26,7 @@ const COLORS = {
   surface: '#F5F5F5',
   textPrimary: '#1A1A1A',
   textSecondary: '#666666',
+  verified: '#10B981',
 };
 
 export function PlatProEventsScreen({ navigation }: any) {
@@ -26,57 +34,84 @@ export function PlatProEventsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
+    loadMyEvents();
+  }, []);
+
+  const loadMyEvents = async () => {
       try {
         const res = await eventsService.getMyEvents();
-        const items = Array.isArray(res?.items ?? res) ? (res.items ?? res) : [];
+        // Handle paginated response or array
+        const items = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
         setEvents(items);
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
-    })();
-  }, []);
+  };
 
   const renderItem = ({ item }: { item: Event }) => {
     const dateLabel = format(new Date(item.startDate), 'EEE, MMM d • h:mm a');
-    const location =
-      item.locationType === 'custom' && item.customLocation
-        ? `${item.customLocation.address}, ${item.customLocation.city}`
-        : 'Venue / TBD';
+    
+    // Determine location text
+    let location = 'Location TBD';
+    if (item.location?.type === 'venue' && item.venue?.name) {
+        location = item.venue.name;
+    } else if (item.location?.city) {
+        location = item.location.city;
+    }
+
+    // Is this an imported event?
+    const isImported = item.source !== 'internal';
 
     return (
       <TouchableOpacity
         style={styles.card}
         onPress={() => {
-          // For now, just open user-facing event detail
+          // Navigate to detail where they can edit/manage
           navigation.navigate('EventDetail', { eventId: item.id, event: item });
         }}
       >
-        <Text style={styles.cardTitle} numberOfLines={2}>
-          {item.title}
-        </Text>
+        <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+                {item.title}
+            </Text>
+            {/* Visual Indicator for Source */}
+            {isImported ? (
+                <View style={styles.sourceTag}>
+                    <Globe size={12} color={COLORS.accent} />
+                    <Text style={styles.sourceTagText}>Imported</Text>
+                </View>
+            ) : (
+                <View style={[styles.sourceTag, {backgroundColor: '#DCFCE7'}]}>
+                    <CheckCircle size={12} color={COLORS.verified} />
+                    <Text style={[styles.sourceTagText, {color: COLORS.verified}]}>Manual</Text>
+                </View>
+            )}
+        </View>
+
         <View style={styles.metaRow}>
           <Calendar size={14} color={COLORS.textSecondary} />
           <Text style={styles.metaText}>{dateLabel}</Text>
         </View>
+        
         <View style={styles.metaRow}>
           <MapPin size={14} color={COLORS.textSecondary} />
           <Text style={styles.metaText} numberOfLines={1}>
             {location}
           </Text>
         </View>
-        <Text style={styles.statusText}>
-          Status:{' '}
-          <Text style={{ fontWeight: '600' }}>
-            {item.status === 'published'
-              ? 'Published'
-              : item.status === 'draft'
-              ? 'Draft'
-              : item.status === 'cancelled'
-              ? 'Cancelled'
-              : 'Completed'}
-          </Text>
-        </Text>
+
+        <View style={styles.footerRow}>
+            <Text style={styles.statusText}>
+            Status: <Text style={styles.statusValue}>{item.status || 'Draft'}</Text>
+            </Text>
+            
+            {/* Show Source text if imported */}
+            {isImported && (
+                <Text style={styles.sourceFooterText}>via {item.source}</Text>
+            )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -87,7 +122,7 @@ export function PlatProEventsScreen({ navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <ChevronLeft color={COLORS.primary} size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My events</Text>
+        <Text style={styles.headerTitle}>My Events</Text>
         <TouchableOpacity onPress={() => navigation.navigate('PlatProCreateEvent')}>
           <Plus color={COLORS.primary} size={20} />
         </TouchableOpacity>
@@ -101,8 +136,14 @@ export function PlatProEventsScreen({ navigation }: any) {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No events yet</Text>
           <Text style={styles.emptySub}>
-            Create your first event to start selling tickets with Plat Pro.
+            Create your first event or claim one from the discovery feed.
           </Text>
+          <TouchableOpacity 
+            style={styles.createButton}
+            onPress={() => navigation.navigate('PlatProCreateEvent')}
+          >
+              <Text style={styles.createButtonText}>Create Event</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -135,13 +176,59 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 4 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+  },
+  cardTitle: { 
+      fontSize: 16, 
+      fontWeight: '600', 
+      color: COLORS.textPrimary,
+      flex: 1,
+      marginRight: 8,
+  },
+  sourceTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#EDE9FE', // Light purple
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 8,
+      gap: 4,
+  },
+  sourceTagText: {
+      fontSize: 10,
+      color: COLORS.accent,
+      fontWeight: '600',
+  },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   metaText: { fontSize: 13, color: COLORS.textSecondary, flex: 1 },
-  statusText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 6 },
+  footerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 8,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  statusText: { fontSize: 12, color: COLORS.textSecondary },
+  statusValue: { fontWeight: '600', color: COLORS.primary, textTransform: 'capitalize' },
+  sourceFooterText: { fontSize: 10, color: COLORS.textSecondary, fontStyle: 'italic' },
+  
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
   emptyTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 8 },
-  emptySub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center' },
+  emptySub: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 24 },
+  createButton: {
+      backgroundColor: COLORS.primary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 24,
+  },
+  createButtonText: { color: 'white', fontWeight: '600' },
 });
-

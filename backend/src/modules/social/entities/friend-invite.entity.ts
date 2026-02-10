@@ -42,4 +42,3 @@ export class FriendInvite {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

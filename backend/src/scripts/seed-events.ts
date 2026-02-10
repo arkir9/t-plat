@@ -17,11 +17,7 @@ import * as bcrypt from 'bcrypt';
 
 import { User } from '../modules/users/entities/user.entity';
 import { OrganizerProfile } from '../modules/organizers/entities/organizer-profile.entity';
-import {
-  Event,
-  EventStatus,
-  LocationType,
-} from '../modules/events/entities/event.entity';
+import { Event, EventStatus, EventType, LocationType } from '../modules/events/entities/event.entity';
 
 // Load backend .env (works from dist/scripts as well)
 config({ path: join(__dirname, '..', '..', '.env') });
@@ -104,10 +100,9 @@ async function run() {
     {
       organizerId: organizer.id,
       title: 'Featured Night: Live Jazz & Cocktails',
-      description:
-        'Top of listings featured event. An evening of live jazz and premium cocktails.',
+      description: 'Top of listings featured event. An evening of live jazz and premium cocktails.',
       category: 'music',
-      eventType: 'concert',
+      eventType: EventType.CONCERT,
       startDate: inOneWeek,
       endDate: new Date(inOneWeek.getTime() + 4 * 60 * 60 * 1000),
       timezone: 'Africa/Nairobi',
@@ -123,10 +118,9 @@ async function run() {
     {
       organizerId: organizer.id,
       title: 'Sponsored: Tech Meetup Nairobi',
-      description:
-        'Sponsored placement from TechHub. Network with developers and startups.',
+      description: 'Sponsored placement from TechHub. Network with developers and startups.',
       category: 'tech',
-      eventType: 'meetup',
+      eventType: EventType.BUSINESS,
       startDate: inTwoWeeks,
       endDate: new Date(inTwoWeeks.getTime() + 3 * 60 * 60 * 1000),
       timezone: 'Africa/Nairobi',
@@ -142,10 +136,9 @@ async function run() {
     {
       organizerId: organizer.id,
       title: 'Banner Event: New Year Eve Gala',
-      description:
-        'Highlighted with banner ad. Premium New Year celebration.',
+      description: 'Highlighted with banner ad. Premium New Year celebration.',
       category: 'nightlife',
-      eventType: 'gala',
+      eventType: EventType.NIGHTLIFE,
       startDate: inOneMonth,
       endDate: new Date(inOneMonth.getTime() + 6 * 60 * 60 * 1000),
       timezone: 'Africa/Nairobi',
@@ -155,8 +148,7 @@ async function run() {
       isFeatured: true,
       isSponsored: true,
       sponsorName: 'T-Plat Premium',
-      bannerImageUrl:
-        'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800',
+      bannerImageUrl: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800',
       publishDate: now,
       tags: ['new year', 'gala', 'premium'],
       ageRestriction: '21+',
@@ -166,7 +158,7 @@ async function run() {
       title: 'Weekend Brunch & Beats',
       description: 'Sunday brunch with DJ and outdoor seating.',
       category: 'food',
-      eventType: 'brunch',
+      eventType: EventType.OTHER,
       startDate: inOneWeek,
       endDate: new Date(inOneWeek.getTime() + 4 * 60 * 60 * 1000),
       timezone: 'Africa/Nairobi',
@@ -181,10 +173,9 @@ async function run() {
     {
       organizerId: organizer.id,
       title: 'Sponsored: Fitness Fest 2025',
-      description:
-        'Sponsored by FitLife. Full-day fitness workshops and demos.',
+      description: 'Sponsored by FitLife. Full-day fitness workshops and demos.',
       category: 'sports',
-      eventType: 'fitness',
+      eventType: EventType.SPORTS,
       startDate: inTwoWeeks,
       endDate: new Date(inTwoWeeks.getTime() + 8 * 60 * 60 * 1000),
       timezone: 'Africa/Nairobi',
@@ -194,8 +185,7 @@ async function run() {
       isFeatured: false,
       isSponsored: true,
       sponsorName: 'FitLife Kenya',
-      bannerImageUrl:
-        'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800',
+      bannerImageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800',
       publishDate: now,
       tags: ['fitness', 'workshop'],
     },
@@ -204,7 +194,7 @@ async function run() {
       title: 'Art & Wine Evening',
       description: 'Local art showcase with wine tasting.',
       category: 'arts',
-      eventType: 'exhibition',
+      eventType: EventType.ARTS_CULTURE,
       startDate: inOneMonth,
       endDate: new Date(inOneMonth.getTime() + 3 * 60 * 60 * 1000),
       timezone: 'Africa/Nairobi',
@@ -236,11 +226,7 @@ async function run() {
     }
   }
 
-  console.log(
-    'Dummy events: %d new, %d already existed',
-    created,
-    dummyEvents.length - created,
-  );
+  console.log('Dummy events: %d new, %d already existed', created, dummyEvents.length - created);
 
   await dataSource.destroy();
 }
@@ -249,4 +235,3 @@ run().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

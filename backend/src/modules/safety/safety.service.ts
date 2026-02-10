@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not } from 'typeorm';
 import { EmergencyContact } from './entities/emergency-contact.entity';
@@ -10,11 +6,7 @@ import { EventCheckIn, CheckInType } from './entities/event-check-in.entity';
 import { SafetyReport, ReportStatus } from './entities/safety-report.entity';
 import { Event } from '../events/entities/event.entity';
 import { Ticket } from '../tickets/entities/ticket.entity';
-import {
-  CreateEmergencyContactDto,
-  CheckInDto,
-  CreateSafetyReportDto,
-} from './dto';
+import { CreateEmergencyContactDto, CheckInDto, CreateSafetyReportDto } from './dto';
 
 @Injectable()
 export class SafetyService {

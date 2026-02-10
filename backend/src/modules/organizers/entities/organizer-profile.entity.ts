@@ -40,6 +40,9 @@ export class OrganizerProfile {
   @Column({ type: 'varchar', length: 255, nullable: true })
   website: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true, name: 'stripe_account_id' })
+  stripeAccountId: string | null;
+
   @Column({ type: 'jsonb', nullable: true, name: 'social_links' })
   socialLinks: Record<string, string>;
 

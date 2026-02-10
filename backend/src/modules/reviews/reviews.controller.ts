@@ -10,13 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -37,10 +31,7 @@ export class ReviewsController {
   @ApiResponse({ status: 400, description: 'Bad request - already reviewed' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Event not found' })
-  async createReview(
-    @CurrentUser() user: User,
-    @Body() createDto: CreateReviewDto,
-  ) {
+  async createReview(@CurrentUser() user: User, @Body() createDto: CreateReviewDto) {
     return this.reviewsService.createReview(user.id, createDto);
   }
 

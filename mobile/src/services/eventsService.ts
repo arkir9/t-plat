@@ -1,29 +1,9 @@
+// mobile/src/services/eventsService.ts
 import { api } from './api';
+import { Event } from '../types'; 
 
-export interface Event {
-  id: string;
-  title: string;
-  description?: string;
-  organizerId: string;
-  venueId?: string;
-  startDate: string;
-  endDate: string;
-  locationType: 'venue' | 'custom';
-  customLocation?: {
-    address: string;
-    city: string;
-    country: string;
-    latitude: number;
-    longitude: number;
-  };
-  price?: number;
-  currency?: string;
-  image?: string;
-  category?: string;
-  eventType?: string;
-  status: 'draft' | 'published' | 'cancelled' | 'completed';
-  isFeatured?: boolean;
-}
+// Re-exporting Event from types is better, but keeping your local interface if needed
+// For this implementation, we rely on the updated structure in types/index.ts
 
 export interface EventQueryParams {
   page?: number;
@@ -56,9 +36,14 @@ export const eventsService = {
   /**
    * Get all events with filtering
    */
-  async getEvents(params?: EventQueryParams) {
+  async getEvents(params?: EventQueryParams): Promise<{
+    data: Event[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
     const response = await api.get('/events', { params });
-    return normalizeListResponse(response.data);
+    return normalizeListResponse<Event>(response.data);
   },
 
   /**
@@ -68,7 +53,7 @@ export const eventsService = {
     const response = await api.get('/events/recommended/me', {
       params: { limit },
     });
-    return normalizeListResponse(response.data);
+    return normalizeListResponse<Event>(response.data);
   },
 
   /**
@@ -76,7 +61,7 @@ export const eventsService = {
    */
   async getFeaturedEvents(params?: EventQueryParams) {
     const response = await api.get('/events/featured', { params });
-    return normalizeListResponse(response.data);
+    return normalizeListResponse<Event>(response.data);
   },
 
   /**
@@ -86,7 +71,7 @@ export const eventsService = {
     const response = await api.get('/events/nearby', {
       params: { latitude, longitude, radius },
     });
-    return normalizeListResponse(response.data);
+    return normalizeListResponse<Event>(response.data);
   },
 
   /**
@@ -96,6 +81,16 @@ export const eventsService = {
     const response = await api.get(`/events/${eventId}`);
     return response.data;
   },
+
+  // --- NEW CLAIM METHOD ---
+  /**
+   * Claim an imported event (Organizer only)
+   */
+  async claimEvent(eventId: string) {
+    const response = await api.post(`/events/${eventId}/claim`);
+    return response.data;
+  },
+  // ------------------------
 
   /**
    * Track a view interaction for personalization

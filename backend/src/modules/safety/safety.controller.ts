@@ -10,19 +10,9 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { SafetyService } from './safety.service';
-import {
-  CreateEmergencyContactDto,
-  CheckInDto,
-  CreateSafetyReportDto,
-} from './dto';
+import { CreateEmergencyContactDto, CheckInDto, CreateSafetyReportDto } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
@@ -71,10 +61,7 @@ export class SafetyController {
   @ApiParam({ name: 'id', description: 'Contact ID' })
   @ApiResponse({ status: 204, description: 'Emergency contact deleted successfully' })
   @ApiResponse({ status: 404, description: 'Contact not found' })
-  async deleteEmergencyContact(
-    @Param('id') contactId: string,
-    @CurrentUser() user: User,
-  ) {
+  async deleteEmergencyContact(@Param('id') contactId: string, @CurrentUser() user: User) {
     return this.safetyService.deleteEmergencyContact(contactId, user.id);
   }
 
@@ -94,10 +81,7 @@ export class SafetyController {
   @ApiResponse({ status: 201, description: 'Checked out successfully' })
   @ApiResponse({ status: 400, description: 'Not checked in' })
   @ApiResponse({ status: 404, description: 'Event not found' })
-  async checkOut(
-    @CurrentUser() user: User,
-    @Body('eventId') eventId: string,
-  ) {
+  async checkOut(@CurrentUser() user: User, @Body('eventId') eventId: string) {
     return this.safetyService.checkOut(user.id, eventId);
   }
 
@@ -105,10 +89,7 @@ export class SafetyController {
   @ApiOperation({ summary: 'Get check-in status for event' })
   @ApiParam({ name: 'eventId', description: 'Event ID' })
   @ApiResponse({ status: 200, description: 'Check-in status retrieved successfully' })
-  async getCheckInStatus(
-    @Param('eventId') eventId: string,
-    @CurrentUser() user: User,
-  ) {
+  async getCheckInStatus(@Param('eventId') eventId: string, @CurrentUser() user: User) {
     return this.safetyService.getCheckInStatus(user.id, eventId);
   }
 
@@ -117,10 +98,7 @@ export class SafetyController {
   @ApiOperation({ summary: 'Create safety report' })
   @ApiResponse({ status: 201, description: 'Safety report created successfully' })
   @ApiResponse({ status: 404, description: 'Event not found' })
-  async createSafetyReport(
-    @CurrentUser() user: User,
-    @Body() createDto: CreateSafetyReportDto,
-  ) {
+  async createSafetyReport(@CurrentUser() user: User, @Body() createDto: CreateSafetyReportDto) {
     return this.safetyService.createSafetyReport(user.id, createDto);
   }
 

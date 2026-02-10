@@ -71,7 +71,9 @@ export class TicketsService {
 
     // Check if user is the organizer (via organizer profile)
     if (!event.organizer || event.organizer.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to create ticket types for this event');
+      throw new ForbiddenException(
+        'You do not have permission to create ticket types for this event',
+      );
     }
 
     const createdTicketTypes = ticketTypes.map((dto) =>
@@ -255,7 +257,8 @@ export class TicketsService {
       }
 
       // Calculate totals with commissions
-      const venueFeePercentage = event.venueFeeType === 'percentage' ? event.venueFeePercentage : null;
+      const venueFeePercentage =
+        event.venueFeeType === 'percentage' ? event.venueFeePercentage : null;
       const venueFeeFixed = event.venueFeeType === 'fixed' ? event.venueFeeAmount : null;
       const totals = this.calculateOrderTotals(subtotal, venueFeePercentage, venueFeeFixed);
 
@@ -294,11 +297,7 @@ export class TicketsService {
         // Create individual tickets
         for (let i = 0; i < item.quantity; i++) {
           const tempTicketId = crypto.randomUUID();
-          const qrCode = await this.generateQRCode(
-            tempTicketId,
-            eventId,
-            userId,
-          );
+          const qrCode = await this.generateQRCode(tempTicketId, eventId, userId);
           const qrCodeHash = this.generateQRCodeHash(qrCode);
 
           const ticket = queryRunner.manager.create(Ticket, {

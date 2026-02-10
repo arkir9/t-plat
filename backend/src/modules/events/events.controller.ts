@@ -1,242 +1,152 @@
 import {
+  Body,
   Controller,
   Get,
   Post,
-  Body,
-  Patch,
   Param,
-  Delete,
   Query,
   UseGuards,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
 import { EventsService } from './events.service';
-import { CreateEventDto, UpdateEventDto, EventQueryDto, EventResponseDto } from './dto';
-import { EventStatus } from './entities/event.entity';
-import { EventInteractionType } from './entities/event-interaction.entity';
-import { PaginatedResponse } from '../../common/dto/pagination.dto';
+import { CreateEventDto, EventQueryDto, EventResponseDto } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
-import { ApiPaginatedResponse } from '../../common/decorators/api-paginated-response.decorator';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Public } from '../../common/decorators/public.decorator';
+import { OrganizersService } from '../organizers/organizers.service';
 
-@ApiTags('events')
+@ApiTags('Events')
 @Controller('events')
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly organizersService: OrganizersService,
+  ) {}
 
-  @Post()
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Create a new event' })
-  @ApiResponse({
-    status: 201,
-    description: 'Event created successfully',
-    type: EventResponseDto,
-  })
-  @ApiResponse({ status: 400, description: 'Bad request - validation failed' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async createEvent(
-    @CurrentUser() user: User,
-    @Body() createEventDto: CreateEventDto,
-  ): Promise<EventResponseDto> {
-    // Note: In a real implementation, we'd need to get the organizer profile ID
-    // For now, we'll assume the user has an organizer profile
-    const event = await this.eventsService.createEvent(user.id, createEventDto);
-    return this.eventsService.findEventById(event.id);
-  }
+  // ---------------------------------------------------------------------------
+  // Public discovery endpoints used by the mobile app
+  // ---------------------------------------------------------------------------
 
+  @Public()
   @Get()
-  @ApiOperation({ summary: 'Get all events with filtering and pagination' })
-  @ApiPaginatedResponse(EventResponseDto)
-  @ApiQuery({ type: EventQueryDto })
-  async findEvents(
-    @Query() queryDto: EventQueryDto,
-  ): Promise<PaginatedResponse<EventResponseDto>> {
-    return this.eventsService.findEvents(queryDto);
+  @ApiOperation({ summary: 'List events (paginated)' })
+  @ApiResponse({ status: 200, type: [EventResponseDto] })
+  async getEvents(@Query() query: EventQueryDto) {
+    return this.eventsService.listEvents(query);
   }
 
-  @Get('featured')
-  @ApiOperation({ summary: 'Get featured events' })
-  @ApiPaginatedResponse(EventResponseDto)
-  @ApiQuery({ type: EventQueryDto })
-  async getFeaturedEvents(
-    @Query() queryDto: EventQueryDto,
-  ): Promise<PaginatedResponse<EventResponseDto>> {
-    return this.eventsService.getFeaturedEvents(queryDto);
-  }
-
-  @Get('sponsored')
-  @ApiOperation({ summary: 'Get sponsored events (paid advertising placements)' })
-  @ApiPaginatedResponse(EventResponseDto)
-  @ApiQuery({ type: EventQueryDto })
-  async getSponsoredEvents(
-    @Query() queryDto: EventQueryDto,
-  ): Promise<PaginatedResponse<EventResponseDto>> {
-    return this.eventsService.getSponsoredEvents(queryDto);
-  }
-
-  @Get('nearby')
-  @ApiOperation({ summary: 'Get nearby events based on location' })
-  @ApiPaginatedResponse(EventResponseDto)
-  @ApiQuery({ name: 'latitude', required: true, type: 'number' })
-  @ApiQuery({ name: 'longitude', required: true, type: 'number' })
-  @ApiQuery({ name: 'radius', required: false, type: 'number', description: 'Radius in kilometers (default: 25)' })
-  async getNearbyEvents(
-    @Query('latitude') latitude: string,
-    @Query('longitude') longitude: string,
-    @Query('radius') radius?: string,
-    @Query() queryDto?: EventQueryDto,
-  ): Promise<PaginatedResponse<EventResponseDto>> {
-    const lat = parseFloat(latitude);
-    const lng = parseFloat(longitude);
-    const radiusKm = radius ? parseFloat(radius) : 25;
-    // If coords invalid, return all published events (no geo filter) so app still works
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return this.eventsService.findEvents({ page: 1, limit: 50, status: EventStatus.PUBLISHED, ...queryDto } as EventQueryDto);
-    }
-    return this.eventsService.getNearbyEvents(lat, lng, radiusKm, queryDto);
-  }
-
-  @Get('my-events')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Get current user\'s events' })
-  @ApiPaginatedResponse(EventResponseDto)
-  @ApiQuery({ type: EventQueryDto })
-  async getMyEvents(
-    @CurrentUser() user: User,
-    @Query() queryDto: EventQueryDto,
-  ): Promise<PaginatedResponse<EventResponseDto>> {
-    // Note: In a real implementation, we'd get the organizer profile ID
-    return this.eventsService.getOrganizerEvents(user.id, queryDto);
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get event by ID' })
-  @ApiParam({ name: 'id', description: 'Event ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Event found',
-    type: EventResponseDto,
-  })
-  @ApiResponse({ status: 404, description: 'Event not found' })
-  async findEventById(@Param('id') id: string): Promise<EventResponseDto> {
-    return this.eventsService.findEventById(id);
-  }
-
-  @Post(':id/track-view')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Track a view interaction for personalization' })
-  @ApiParam({ name: 'id', description: 'Event ID' })
-  @ApiResponse({ status: 204, description: 'View tracked' })
-  async trackView(@Param('id') id: string, @CurrentUser() user: User): Promise<void> {
-    await this.eventsService.trackInteraction(user.id, id, EventInteractionType.VIEW);
-  }
-
+  @ApiBearerAuth()
   @Get('recommended/me')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Get personalized recommended events for current user' })
-  @ApiPaginatedResponse(EventResponseDto)
+  @ApiOperation({ summary: 'Get recommended events for the current user' })
   async getRecommendedForMe(
     @CurrentUser() user: User,
     @Query('limit') limit?: string,
-  ): Promise<PaginatedResponse<EventResponseDto>> {
-    const parsedLimit = limit ? parseInt(limit, 10) || 10 : 10;
-    const items = await this.eventsService.getRecommendedEventsForUser(user.id, parsedLimit);
-    return new PaginatedResponse(items, items.length, 1, parsedLimit);
+  ): Promise<{ data: EventResponseDto[]; total: number; page: number; limit: number }> {
+    const limitNum = Number(limit) > 0 ? Number(limit) : 10;
+    return this.eventsService.getRecommendedForUser(user.id, limitNum);
   }
 
-  @Patch(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Update event' })
-  @ApiParam({ name: 'id', description: 'Event ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Event updated successfully',
-    type: EventResponseDto,
-  })
-  @ApiResponse({ status: 400, description: 'Bad request - validation failed' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not event owner' })
+  @Public()
+  @Get('featured')
+  @ApiOperation({ summary: 'Get featured events for home screen' })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getFeatured(@Query('limit') limit?: string) {
+    const limitNum = Number(limit) > 0 ? Number(limit) : 5;
+    return this.eventsService.getFeaturedEvents(limitNum);
+  }
+
+  @Public()
+  @Get('nearby')
+  @ApiOperation({ summary: 'Get nearby events (simplified)' })
+  @ApiQuery({ name: 'latitude', required: false, type: String })
+  @ApiQuery({ name: 'longitude', required: false, type: String })
+  @ApiQuery({ name: 'radius', required: false, type: String })
+  async getNearby(@Query() query: EventQueryDto) {
+    return this.eventsService.getNearbyEvents(query);
+  }
+
+  @Public()
+  @Get(':id([0-9a-fA-F-]{36})')
+  @ApiOperation({ summary: 'Get event details by ID' })
+  @ApiResponse({ status: 200, type: EventResponseDto })
   @ApiResponse({ status: 404, description: 'Event not found' })
-  async updateEvent(
-    @Param('id') id: string,
-    @CurrentUser() user: User,
-    @Body() updateEventDto: UpdateEventDto,
-  ): Promise<EventResponseDto> {
-    return this.eventsService.updateEvent(id, user.id, updateEventDto);
+  async getEventById(@Param('id') id: string): Promise<EventResponseDto> {
+    return this.eventsService.findEventById(id);
   }
 
-  @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
+  @ApiBearerAuth()
+  @Post(':id([0-9a-fA-F-]{36})/track-view')
+  @ApiOperation({ summary: 'Track a view interaction for personalization' })
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete event' })
-  @ApiParam({ name: 'id', description: 'Event ID' })
-  @ApiResponse({ status: 204, description: 'Event deleted successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not event owner' })
-  @ApiResponse({ status: 404, description: 'Event not found' })
-  async deleteEvent(
-    @Param('id') id: string,
-    @CurrentUser() user: User,
-  ): Promise<void> {
-    return this.eventsService.deleteEvent(id, user.id);
+  async trackView(@Param('id') id: string, @CurrentUser() user: User): Promise<void> {
+    await this.eventsService.trackView(user.id, id);
   }
 
-  @Patch(':id/publish')
+  // ---------------------------------------------------------------------------
+  // Organizer endpoints
+  // ---------------------------------------------------------------------------
+
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Publish event' })
-  @ApiParam({ name: 'id', description: 'Event ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Event published successfully',
-    type: EventResponseDto,
-  })
-  @ApiResponse({ status: 400, description: 'Bad request - event cannot be published' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not event owner' })
-  @ApiResponse({ status: 404, description: 'Event not found' })
-  async publishEvent(
-    @Param('id') id: string,
+  @ApiBearerAuth()
+  @Get('my-events')
+  @ApiOperation({ summary: 'List events owned by the current organizer' })
+  async getMyEvents(
     @CurrentUser() user: User,
-  ): Promise<EventResponseDto> {
-    return this.eventsService.publishEvent(id, user.id);
+    @Query() query: EventQueryDto,
+  ): Promise<{ data: EventResponseDto[]; total: number; page: number; limit: number }> {
+    const profiles = await this.organizersService.findByUserId(user.id);
+    const organizerProfile =
+      profiles.find((p) => p.profileType === 'event_organizer') ?? profiles[0];
+    if (!organizerProfile) {
+      throw new ForbiddenException('User is not an organizer');
+    }
+
+    return this.eventsService.listEventsForOrganizer(organizerProfile.id, query);
   }
 
-  @Patch(':id/cancel')
+  @Post()
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: 'Cancel event' })
-  @ApiParam({ name: 'id', description: 'Event ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Event cancelled successfully',
-    type: EventResponseDto,
-  })
-  @ApiResponse({ status: 400, description: 'Bad request - event cannot be cancelled' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - not event owner' })
-  @ApiResponse({ status: 404, description: 'Event not found' })
-  async cancelEvent(
-    @Param('id') id: string,
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new event (Organizer only)' })
+  @ApiResponse({ status: 201, type: EventResponseDto })
+  async createEvent(
+    @Body() createDto: CreateEventDto,
     @CurrentUser() user: User,
   ): Promise<EventResponseDto> {
-    return this.eventsService.cancelEvent(id, user.id);
+    // For now, use the primary organizer profile for this user
+    const profiles = await this.organizersService.findByUserId(user.id);
+    const organizerProfile =
+      profiles.find((p) => p.profileType === 'event_organizer') ?? profiles[0];
+    if (!organizerProfile) {
+      throw new ForbiddenException('User is not an organizer');
+    }
+
+    return this.eventsService.createEvent(createDto, organizerProfile.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Claim endpoint for hybrid strategy
+  // ---------------------------------------------------------------------------
+
+  @Post(':id([0-9a-fA-F-]{36})/claim')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Claim an imported event (Organizer only)' })
+  @ApiResponse({ status: 200, description: 'Event claimed successfully.' })
+  async claimEvent(@Param('id') id: string, @CurrentUser() user: User) {
+    const profiles = await this.organizersService.findByUserId(user.id);
+    const organizerProfile =
+      profiles.find((p) => p.profileType === 'event_organizer') ?? profiles[0];
+    if (!organizerProfile) {
+      throw new ForbiddenException('User is not an organizer');
+    }
+    return this.eventsService.claimEvent(id, organizerProfile.id);
   }
 }

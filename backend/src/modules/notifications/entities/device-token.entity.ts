@@ -41,4 +41,3 @@ export class DeviceToken {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

@@ -1,65 +1,109 @@
-import React from 'react';
-import { createStackNavigator } from '@react-navigation/stack';
-import { SimpleSplash } from '../screens/SimpleSplash';
+import React, { useEffect } from 'react';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { NavigatorScreenParams } from '@react-navigation/native';
+import { useAuthStore } from '../store/authStore';
+
+// Screens
+import { WelcomeScreen } from '../screens/auth/WelcomeScreen';
+import { LoginScreen } from '../screens/auth/LoginScreen';
+import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
-import { AuthScreen } from '../screens/auth/AuthScreen';
+import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { MainTabNavigator } from './MainTabNavigator';
 import { EventDetailScreen } from '../screens/events/EventDetailScreen';
 import { TicketSelectionScreen } from '../screens/tickets/TicketSelectionScreen';
 import { CheckoutScreen } from '../screens/tickets/CheckoutScreen';
 import { SuccessScreen } from '../screens/tickets/SuccessScreen';
-import { MyTicketScreen } from '../screens/tickets/MyTicketScreen';
-import { TicketsScreen } from '../screens/tickets/TicketsScreen';
-import { SafetyCenterScreen } from '../screens/profile/SafetyCenterScreen';
+import { ProfileScreen } from '../screens/profile/ProfileScreen';
+import { SettingsScreen } from '../screens/profile/SettingsScreen';
 import { FavoritesScreen } from '../screens/profile/FavoritesScreen';
 import { WaitlistScreen } from '../screens/profile/WaitlistScreen';
-import { SettingsScreen } from '../screens/profile/SettingsScreen';
+import { SafetyCenterScreen } from '../screens/profile/SafetyCenterScreen';
+
+// Organizer Screens
 import { PlatProScreen } from '../screens/profile/PlatProScreen';
 import { PlatProDashboardScreen } from '../screens/profile/PlatProDashboardScreen';
 import { PlatProEventsScreen } from '../screens/profile/PlatProEventsScreen';
 import { PlatProCreateEventScreen } from '../screens/profile/PlatProCreateEventScreen';
+import { WalletScreen } from '../screens/profile/WalletScreen'; // <--- NEW IMPORT
 
-const Stack = createStackNavigator();
+export type RootStackParamList = {
+  Welcome: undefined;
+  Login: undefined;
+  Register: undefined;
+  Onboarding: undefined;
+  ForgotPassword: undefined;
+  MainTabs: undefined;
+  EventDetail: { eventId: string; event?: any };
+  TicketSelection: { eventId: string; event?: any };
+  Checkout: { eventId: string; ticketTypes: any; total: number; eventTitle: string };
+  Success: { orderId: string; totalAmount: number; eventTitle: string };
+  Profile: undefined;
+  Settings: undefined;
+  Favorites: undefined;
+  Waitlist: undefined;
+  SafetyCenter: undefined;
+  PlatPro: undefined;
+  PlatProDashboard: undefined;
+  PlatProEvents: undefined;
+  PlatProCreateEvent: { eventId?: string }; // Optional ID for editing
+  Wallet: undefined; // <--- NEW ROUTE
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
+  const { isAuthenticated, isOnboarded, checkAuth } = useAuthStore();
+  const hasOnboarded = isOnboarded ?? true;
+
+  useEffect(() => {
+    checkAuth?.();
+  }, [checkAuth]);
+
   return (
-    <Stack.Navigator 
-      initialRouteName="Splash"
-      screenOptions={{ 
+    <Stack.Navigator
+      screenOptions={{
         headerShown: false,
-        cardStyle: { backgroundColor: '#000' },
+        animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen 
-        name="Splash" 
-        component={SimpleSplash}
-      />
-      <Stack.Screen 
-        name="Onboarding" 
-        component={OnboardingScreen}
-      />
-      <Stack.Screen 
-        name="Auth" 
-        component={AuthScreen}
-      />
-      <Stack.Screen 
-        name="MainTabs" 
-        component={MainTabNavigator}
-      />
-      <Stack.Screen name="EventDetail" component={EventDetailScreen} />
-      <Stack.Screen name="TicketSelection" component={TicketSelectionScreen} />
-      <Stack.Screen name="Checkout" component={CheckoutScreen} />
-      <Stack.Screen name="Success" component={SuccessScreen} />
-      <Stack.Screen name="MyTicket" component={MyTicketScreen} />
-      <Stack.Screen name="Tickets" component={TicketsScreen} />
-      <Stack.Screen name="Favorites" component={FavoritesScreen} />
-      <Stack.Screen name="Waitlist" component={WaitlistScreen} />
-      <Stack.Screen name="SafetyCenter" component={SafetyCenterScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="PlatPro" component={PlatProScreen} />
-      <Stack.Screen name="PlatProDashboard" component={PlatProDashboardScreen} />
-      <Stack.Screen name="PlatProEvents" component={PlatProEventsScreen} />
-      <Stack.Screen name="PlatProCreateEvent" component={PlatProCreateEventScreen} />
+      {!isAuthenticated ? (
+        // Auth Stack
+        <Stack.Group>
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        </Stack.Group>
+      ) : !hasOnboarded ? (
+        // Onboarding Stack
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+      ) : (
+        // App Stack
+        <Stack.Group>
+          <Stack.Screen name="MainTabs" component={MainTabNavigator} />
+          
+          {/* Event & Ticketing Flow */}
+          <Stack.Screen name="EventDetail" component={EventDetailScreen} />
+          <Stack.Screen name="TicketSelection" component={TicketSelectionScreen} />
+          <Stack.Screen name="Checkout" component={CheckoutScreen} />
+          <Stack.Screen name="Success" component={SuccessScreen} options={{ gestureEnabled: false }} />
+
+          {/* Profile & Settings */}
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="Favorites" component={FavoritesScreen} />
+          <Stack.Screen name="Waitlist" component={WaitlistScreen} />
+          <Stack.Screen name="SafetyCenter" component={SafetyCenterScreen} />
+
+          {/* Organizer / Plat Pro Flow */}
+          <Stack.Screen name="PlatPro" component={PlatProScreen} />
+          <Stack.Screen name="PlatProDashboard" component={PlatProDashboardScreen} />
+          <Stack.Screen name="PlatProEvents" component={PlatProEventsScreen} />
+          <Stack.Screen name="PlatProCreateEvent" component={PlatProCreateEventScreen} />
+          <Stack.Screen name="Wallet" component={WalletScreen} /> 
+        </Stack.Group>
+      )}
     </Stack.Navigator>
   );
 };

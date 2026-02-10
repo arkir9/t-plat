@@ -21,11 +21,7 @@ export class NotificationsController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Register or update a push notification device token for current user' })
   @ApiResponse({ status: 201, description: 'Device token registered' })
-  async registerDevice(
-    @CurrentUser() user: User,
-    @Body() body: RegisterDeviceDto,
-  ) {
+  async registerDevice(@CurrentUser() user: User, @Body() body: RegisterDeviceDto) {
     return this.notificationsService.registerDeviceToken(user.id, body.token, body.platform);
   }
 }
-

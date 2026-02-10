@@ -62,9 +62,13 @@ export class NotificationsService {
     }
   }
 
-  async registerDeviceToken(userId: string, token: string, platform: DevicePlatform): Promise<DeviceToken> {
+  async registerDeviceToken(
+    userId: string,
+    token: string,
+    platform: DevicePlatform,
+  ): Promise<DeviceToken> {
     // Upsert-style behaviour: if token exists, just associate with user & mark active
-    let existing = await this.deviceTokenRepository.findOne({ where: { token } });
+    const existing = await this.deviceTokenRepository.findOne({ where: { token } });
     if (existing) {
       existing.userId = userId;
       existing.platform = platform;
@@ -181,10 +185,7 @@ export class NotificationsService {
           },
         });
       } catch (error) {
-        this.logger.error(
-          `Failed to send daily recommendation to user ${userId}`,
-          error as any,
-        );
+        this.logger.error(`Failed to send daily recommendation to user ${userId}`, error as any);
       }
     }
   }

@@ -22,7 +22,10 @@ export class DatabaseHealthIndicator extends HealthIndicator {
         return this.getStatus(key, true);
       } catch (error) {
         lastError = error as Error;
-        if (attempt < maxAttempts && (lastError.message?.includes('EAI_AGAIN') || lastError.message?.includes('ECONNREFUSED'))) {
+        if (
+          attempt < maxAttempts &&
+          (lastError.message?.includes('EAI_AGAIN') || lastError.message?.includes('ECONNREFUSED'))
+        ) {
           await new Promise((r) => setTimeout(r, delayMs));
           continue;
         }

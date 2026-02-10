@@ -1,8 +1,11 @@
 import {
   Injectable,
+  Inject,
+  forwardRef,
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -10,21 +13,28 @@ import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import Stripe from 'stripe';
-import * as crypto from 'crypto';
 import { Payment, PaymentMethod, PaymentStatus, Currency } from './entities/payment.entity';
 import { Order, PaymentStatus as OrderPaymentStatus } from '../tickets/entities/order.entity';
-import { CreateStripePaymentDto, CreateMpesaPaymentDto, RefundPaymentDto } from './dto';
+import { CreateStripePaymentDto, CreateMpesaPaymentDto } from './dto';
+import { WalletService } from '../wallet/wallet.service';
+import { WalletTransactionType } from '../wallet/entities/wallet-transaction.entity';
 
 @Injectable()
 export class PaymentsService {
   private stripe: Stripe;
+  private readonly logger = new Logger(PaymentsService.name);
+
+  // M-Pesa Configs
   private mpesaBaseUrl: string;
   private mpesaConsumerKey: string;
   private mpesaConsumerSecret: string;
   private mpesaShortcode: string;
   private mpesaPasskey: string;
-  private mpesaEnvironment: string;
   private mpesaCallbackUrl: string;
+
+  // B2C Configs
+  private mpesaInitiatorName: string;
+  private mpesaInitiatorPassword: string;
 
   constructor(
     @InjectRepository(Payment)
@@ -34,16 +44,16 @@ export class PaymentsService {
     private configService: ConfigService,
     private dataSource: DataSource,
     private httpService: HttpService,
+    @Inject(forwardRef(() => WalletService))
+    private walletService: WalletService,
   ) {
-    // Initialize Stripe
+    // Stripe Init
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (stripeSecretKey) {
-      this.stripe = new Stripe(stripeSecretKey, {
-        apiVersion: '2023-10-16',
-      });
+      this.stripe = new Stripe(stripeSecretKey, { apiVersion: '2023-10-16' });
     }
 
-    // Initialize M-Pesa
+    // M-Pesa Init
     this.mpesaBaseUrl =
       this.configService.get<string>('MPESA_ENVIRONMENT') === 'production'
         ? 'https://api.safaricom.co.ke'
@@ -52,88 +62,91 @@ export class PaymentsService {
     this.mpesaConsumerSecret = this.configService.get<string>('MPESA_CONSUMER_SECRET') || '';
     this.mpesaShortcode = this.configService.get<string>('MPESA_SHORTCODE') || '';
     this.mpesaPasskey = this.configService.get<string>('MPESA_PASSKEY') || '';
-    this.mpesaEnvironment = this.configService.get<string>('MPESA_ENVIRONMENT') || 'sandbox';
     this.mpesaCallbackUrl =
       this.configService.get<string>('MPESA_CALLBACK_URL') ||
       `${this.configService.get<string>('API_URL')}/api/payments/mpesa/callback`;
+
+    this.mpesaInitiatorName = this.configService.get<string>('MPESA_INITIATOR_NAME') || '';
+    this.mpesaInitiatorPassword = this.configService.get<string>('MPESA_INITIATOR_PASSWORD') || '';
   }
 
   /**
-   * Get M-Pesa access token
+   * Helper: Get M-Pesa Access Token
    */
   private async getMpesaAccessToken(): Promise<string> {
-    try {
-      const auth = Buffer.from(`${this.mpesaConsumerKey}:${this.mpesaConsumerSecret}`).toString(
-        'base64',
-      );
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.mpesaBaseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
-          headers: {
-            Authorization: `Basic ${auth}`,
-          },
-        }),
-      );
-      return response.data.access_token;
-    } catch (error: any) {
-      throw new InternalServerErrorException('Failed to get M-Pesa access token: ' + error.message);
-    }
-  }
-
-  /**
-   * Generate M-Pesa password
-   */
-  private generateMpesaPassword(): string {
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3);
-    const password = Buffer.from(`${this.mpesaShortcode}${this.mpesaPasskey}${timestamp}`).toString(
+    const auth = Buffer.from(`${this.mpesaConsumerKey}:${this.mpesaConsumerSecret}`).toString(
       'base64',
     );
-    return password;
+    const response = await firstValueFrom(
+      this.httpService.get(`${this.mpesaBaseUrl}/oauth/v1/generate?grant_type=client_credentials`, {
+        headers: { Authorization: `Basic ${auth}` },
+      }),
+    );
+    return response.data.access_token;
   }
 
   /**
-   * Create Stripe payment intent
+   * Helper: Generate M-Pesa Password
    */
+  private generateMpesaPassword(): string {
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[^0-9]/g, '')
+      .slice(0, -3);
+    return Buffer.from(`${this.mpesaShortcode}${this.mpesaPasskey}${timestamp}`).toString('base64');
+  }
+
+  /**
+   * Helper: Calculate Revenue Split
+   * Defaults to 5% if not specified on the event
+   */
+  private calculateSplit(totalAmount: number, platformFeePercent: number = 5) {
+    const fee = (totalAmount * platformFeePercent) / 100;
+    const net = totalAmount - fee;
+    return { fee, net };
+  }
+
+  // ===========================================================================
+  // STRIPE PAYMENTS (Instant Split)
+  // ===========================================================================
+
   async createStripePayment(userId: string, createDto: CreateStripePaymentDto) {
-    if (!this.stripe) {
-      throw new BadRequestException('Stripe is not configured');
-    }
+    if (!this.stripe) throw new BadRequestException('Stripe is not configured');
 
     const order = await this.orderRepository.findOne({
       where: { id: createDto.orderId },
-      relations: ['user', 'event'],
+      relations: ['user', 'event', 'event.organizer'],
     });
 
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.userId !== userId) throw new BadRequestException('Permission denied');
+    if (order.paymentStatus === OrderPaymentStatus.COMPLETED)
+      throw new BadRequestException('Already paid');
 
-    if (order.userId !== userId) {
-      throw new BadRequestException('You do not have permission to pay for this order');
-    }
-
-    if (order.paymentStatus === OrderPaymentStatus.COMPLETED) {
-      throw new BadRequestException('Order is already paid');
-    }
-
-    // Convert amount to cents (Stripe uses smallest currency unit)
+    const currency = order.currency.toLowerCase();
     const amountInCents = Math.round(order.totalAmount * 100);
 
-    try {
-      // Create payment intent
-      const paymentIntent = await this.stripe.paymentIntents.create({
-        amount: amountInCents,
-        currency: order.currency.toLowerCase(),
-        metadata: {
-          orderId: order.id,
-          userId: userId,
-          eventId: order.eventId,
-        },
-        automatic_payment_methods: {
-          enabled: true,
-        },
-      });
+    // Revenue Split Calculation (use order's platform commission or default 5%)
+    const feePercentage = Number(order.platformCommissionPercentage) || 5;
+    const appFeeInCents = Math.round(amountInCents * (feePercentage / 100));
+    const organizerStripeId = order.event.organizer?.stripeAccountId ?? null;
 
-      // Create payment record
+    const params: Stripe.PaymentIntentCreateParams = {
+      amount: amountInCents,
+      currency: currency,
+      metadata: { orderId: order.id, userId, eventId: order.eventId },
+      automatic_payment_methods: { enabled: true },
+    };
+
+    // If Organizer has Stripe Connect, route funds instantly
+    if (organizerStripeId) {
+      params.application_fee_amount = appFeeInCents;
+      params.transfer_data = { destination: organizerStripeId };
+    }
+
+    try {
+      const paymentIntent = await this.stripe.paymentIntents.create(params);
+
       const payment = this.paymentRepository.create({
         orderId: order.id,
         userId: userId,
@@ -144,62 +157,50 @@ export class PaymentsService {
         paymentIntentId: paymentIntent.id,
         metadata: {
           stripeClientSecret: paymentIntent.client_secret,
+          feePercentage,
+          isConnectSplit: !!organizerStripeId,
         },
       });
 
       await this.paymentRepository.save(payment);
 
-      // Update order with payment intent ID
       order.paymentIntentId = paymentIntent.id;
       await this.orderRepository.save(order);
 
       return {
         paymentId: payment.id,
         clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
       };
     } catch (error: any) {
-      throw new InternalServerErrorException('Failed to create Stripe payment: ' + error.message);
+      throw new InternalServerErrorException('Stripe init failed: ' + error.message);
     }
   }
 
-  /**
-   * Create M-Pesa STK Push payment
-   */
+  // ===========================================================================
+  // M-PESA STK PUSH (Incoming Payment)
+  // ===========================================================================
+
   async createMpesaPayment(userId: string, createDto: CreateMpesaPaymentDto) {
-    if (!this.mpesaConsumerKey || !this.mpesaConsumerSecret) {
-      throw new BadRequestException('M-Pesa is not configured');
-    }
+    if (!this.mpesaConsumerKey) throw new BadRequestException('M-Pesa not configured');
 
     const order = await this.orderRepository.findOne({
       where: { id: createDto.orderId },
       relations: ['user', 'event'],
     });
 
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
-
-    if (order.userId !== userId) {
-      throw new BadRequestException('You do not have permission to pay for this order');
-    }
-
-    if (order.paymentStatus === OrderPaymentStatus.COMPLETED) {
-      throw new BadRequestException('Order is already paid');
-    }
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.paymentStatus === OrderPaymentStatus.COMPLETED)
+      throw new BadRequestException('Already paid');
 
     try {
-      // Get access token
       const accessToken = await this.getMpesaAccessToken();
-
-      // Generate password
-      const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3);
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[^0-9]/g, '')
+        .slice(0, -3);
       const password = this.generateMpesaPassword();
-
-      // Format phone number (remove + if present)
       const phoneNumber = createDto.phoneNumber.replace(/^\+/, '');
 
-      // STK Push request
       const stkPushResponse = await firstValueFrom(
         this.httpService.post(
           `${this.mpesaBaseUrl}/mpesa/stkpush/v1/processrequest`,
@@ -214,24 +215,18 @@ export class PaymentsService {
             PhoneNumber: phoneNumber,
             CallBackURL: this.mpesaCallbackUrl,
             AccountReference: `T-PLAT-${order.orderNumber}`,
-            TransactionDesc: `Payment for order ${order.orderNumber}`,
+            TransactionDesc: `Order ${order.orderNumber}`,
           },
-          {
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-          },
+          { headers: { Authorization: `Bearer ${accessToken}` } },
         ),
       );
 
       if (stkPushResponse.data.ResponseCode !== '0') {
         throw new BadRequestException(
-          `M-Pesa STK Push failed: ${stkPushResponse.data.ResponseDescription}`,
+          `STK Push failed: ${stkPushResponse.data.ResponseDescription}`,
         );
       }
 
-      // Create payment record
       const payment = this.paymentRepository.create({
         orderId: order.id,
         userId: userId,
@@ -242,283 +237,338 @@ export class PaymentsService {
         mpesaPhoneNumber: phoneNumber,
         metadata: {
           checkoutRequestID: stkPushResponse.data.CheckoutRequestID,
-          merchantRequestID: stkPushResponse.data.MerchantRequestID,
         },
       });
 
       await this.paymentRepository.save(payment);
 
-      // Update order
       order.paymentMethod = PaymentMethod.MPESA;
       order.paymentIntentId = stkPushResponse.data.CheckoutRequestID;
       await this.orderRepository.save(order);
 
       return {
         paymentId: payment.id,
-        checkoutRequestID: stkPushResponse.data.CheckoutRequestID,
-        message: 'M-Pesa STK Push initiated. Please check your phone to complete payment.',
+        message: 'STK Push sent.',
       };
     } catch (error: any) {
-      if (error.response) {
-        throw new BadRequestException(
-          `M-Pesa payment failed: ${error.response.data?.errorMessage || error.message}`,
-        );
-      }
-      throw new InternalServerErrorException('Failed to create M-Pesa payment: ' + error.message);
+      throw new InternalServerErrorException('M-Pesa init failed: ' + error.message);
     }
   }
 
-  /**
-   * Handle M-Pesa callback
-   */
   async handleMpesaCallback(callbackData: any) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const { Body } = callbackData;
-      const stkCallback = Body.stkCallback;
+      const stkCallback = callbackData.Body.stkCallback;
       const checkoutRequestID = stkCallback.CheckoutRequestID;
       const resultCode = stkCallback.ResultCode;
-      const resultDesc = stkCallback.ResultDesc;
 
-      // Find payment by checkout request ID (stored in metadata JSONB)
-      // TypeORM doesn't support nested JSONB queries easily, so we use a query builder
+      // Find Payment by CheckoutRequestID (stored in metadata)
+      // Note: We need deep relations to get organizer userId for wallet credit
       const payment = await queryRunner.manager
         .createQueryBuilder(Payment, 'payment')
         .leftJoinAndSelect('payment.order', 'order')
-        .where("payment.metadata->>'checkoutRequestID' = :checkoutRequestID", {
-          checkoutRequestID,
-        })
+        .leftJoinAndSelect('order.event', 'event')
+        .leftJoinAndSelect('event.organizer', 'organizer')
+        .where("payment.metadata->>'checkoutRequestID' = :checkoutRequestID", { checkoutRequestID })
         .getOne();
 
       if (!payment) {
-        throw new NotFoundException('Payment not found');
+        this.logger.error(`Callback received for unknown checkoutID: ${checkoutRequestID}`);
+        return { success: false };
       }
 
       if (resultCode === 0) {
-        // Payment successful
-        const callbackMetadata = stkCallback.CallbackMetadata;
-        const item = callbackMetadata.Item.find((i: any) => i.Name === 'MpesaReceiptNumber');
-        const mpesaReceiptNumber = item?.Value;
+        // --- PAYMENT SUCCESS ---
+        const mpesaReceipt = stkCallback.CallbackMetadata.Item.find(
+          (i: any) => i.Name === 'MpesaReceiptNumber',
+        )?.Value;
 
+        // 1. Calculate Split
+        const feePercent = Number(payment.order.platformCommissionPercentage) || 5;
+        const total = Number(payment.amount);
+        const { fee, net } = this.calculateSplit(total, feePercent);
+
+        // 2. Update Payment
         payment.paymentStatus = PaymentStatus.COMPLETED;
-        payment.mpesaTransactionCode = mpesaReceiptNumber;
-        payment.transactionId = mpesaReceiptNumber;
-        payment.processedAt = new Date();
+        payment.transactionId = mpesaReceipt;
         payment.metadata = {
           ...payment.metadata,
-          mpesaReceiptNumber,
-          resultCode,
-          resultDesc,
+          mpesaReceiptNumber: mpesaReceipt,
+          platformFee: fee,
+          organizerNet: net,
         };
 
-        // Update order
         const order = payment.order;
         order.paymentStatus = OrderPaymentStatus.COMPLETED;
-        order.mpesaTransactionCode = mpesaReceiptNumber;
-        order.paymentDate = new Date();
 
         await queryRunner.manager.save(Payment, payment);
         await queryRunner.manager.save(Order, order);
-
         await queryRunner.commitTransaction();
 
-        return { success: true, message: 'Payment processed successfully' };
+        // 3. CREDIT WALLET (Instant Ledger Split)
+        try {
+          const organizerUserId = order.event.organizer.userId;
+
+          // Invoke Wallet Service (Circular dependency handled via forwardRef)
+          await this.walletService.credit(
+            organizerUserId,
+            net,
+            WalletTransactionType.TICKET_SALE,
+            payment.id,
+            { orderId: order.id, feeCharged: fee },
+          );
+
+          this.logger.log(`Wallet credited: ${net} for user ${organizerUserId}`);
+        } catch (walletError) {
+          this.logger.error(`Failed to credit wallet for payment ${payment.id}`, walletError);
+        }
+
+        return { success: true };
       } else {
-        // Payment failed
+        // --- PAYMENT FAILED ---
         payment.paymentStatus = PaymentStatus.FAILED;
-        payment.failureReason = resultDesc;
-        payment.metadata = {
-          ...payment.metadata,
-          resultCode,
-          resultDesc,
-        };
-
-        // Update order
-        const order = payment.order;
-        order.paymentStatus = OrderPaymentStatus.FAILED;
+        payment.failureReason = stkCallback.ResultDesc;
+        payment.order.paymentStatus = OrderPaymentStatus.FAILED;
 
         await queryRunner.manager.save(Payment, payment);
-        await queryRunner.manager.save(Order, order);
-
+        await queryRunner.manager.save(Order, payment.order);
         await queryRunner.commitTransaction();
 
-        return { success: false, message: resultDesc };
+        return { success: false };
       }
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      if (queryRunner.isTransactionActive) await queryRunner.rollbackTransaction();
+      this.logger.error('Callback processing failed', error);
       throw error;
     } finally {
       await queryRunner.release();
     }
   }
 
+  // ===========================================================================
+  // M-PESA B2C (Withdrawal)
+  // ===========================================================================
+
   /**
-   * Handle Stripe webhook
+   * Generates Security Credential for B2C
+   * In Production: Load Cert -> Public Encrypt -> Base64
    */
-  async handleStripeWebhook(signature: string, payload: Buffer) {
-    const webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
-    if (!webhookSecret) {
-      throw new BadRequestException('Stripe webhook secret not configured');
-    }
-
-    let event: Stripe.Event;
-
-    try {
-      event = this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
-    } catch (error: any) {
-      throw new BadRequestException(`Webhook signature verification failed: ${error.message}`);
-    }
-
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      switch (event.type) {
-        case 'payment_intent.succeeded':
-          const paymentIntent = event.data.object as Stripe.PaymentIntent;
-          await this.processStripePaymentSuccess(paymentIntent, queryRunner);
-          break;
-
-        case 'payment_intent.payment_failed':
-          const failedPaymentIntent = event.data.object as Stripe.PaymentIntent;
-          await this.processStripePaymentFailure(failedPaymentIntent, queryRunner);
-          break;
-
-        case 'charge.refunded':
-          const charge = event.data.object as Stripe.Charge;
-          await this.processStripeRefund(charge, queryRunner);
-          break;
-      }
-
-      await queryRunner.commitTransaction();
-      return { received: true };
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
+  private getSecurityCredential(): string {
+    return 'MOCKED_ENCRYPTED_CREDENTIAL';
   }
 
-  /**
-   * Process successful Stripe payment
-   */
-  private async processStripePaymentSuccess(
-    paymentIntent: Stripe.PaymentIntent,
-    queryRunner: any,
-  ) {
-    const payment = await queryRunner.manager.findOne(Payment, {
-      where: { paymentIntentId: paymentIntent.id },
-      relations: ['order'],
-    });
+  async initiateB2CWithdrawal(transactionId: string, phoneNumber: string, amount: number) {
+    if (!this.mpesaConsumerKey) throw new BadRequestException('M-Pesa not configured');
 
-    if (!payment) {
-      return;
-    }
+    const accessToken = await this.getMpesaAccessToken();
+    const securityCredential = this.getSecurityCredential();
+    const commandID = 'BusinessPayment';
 
-    payment.paymentStatus = PaymentStatus.COMPLETED;
-    payment.stripeChargeId = paymentIntent.latest_charge as string;
-    payment.transactionId = paymentIntent.id;
-    payment.processedAt = new Date();
-
-    const order = payment.order;
-    order.paymentStatus = OrderPaymentStatus.COMPLETED;
-    order.paymentDate = new Date();
-
-    await queryRunner.manager.save(Payment, payment);
-    await queryRunner.manager.save(Order, order);
-  }
-
-  /**
-   * Process failed Stripe payment
-   */
-  private async processStripePaymentFailure(
-    paymentIntent: Stripe.PaymentIntent,
-    queryRunner: any,
-  ) {
-    const payment = await queryRunner.manager.findOne(Payment, {
-      where: { paymentIntentId: paymentIntent.id },
-      relations: ['order'],
-    });
-
-    if (!payment) {
-      return;
-    }
-
-    payment.paymentStatus = PaymentStatus.FAILED;
-    payment.failureReason = paymentIntent.last_payment_error?.message || 'Payment failed';
-
-    const order = payment.order;
-    order.paymentStatus = OrderPaymentStatus.FAILED;
-
-    await queryRunner.manager.save(Payment, payment);
-    await queryRunner.manager.save(Order, order);
-  }
-
-  /**
-   * Process Stripe refund
-   */
-  private async processStripeRefund(charge: Stripe.Charge, queryRunner: any) {
-    // Find payment by charge ID
-    const payment = await queryRunner.manager.findOne(Payment, {
-      where: { stripeChargeId: charge.id },
-      relations: ['order'],
-    });
-
-    if (!payment) {
-      return;
-    }
-
-    // Update payment status based on refund amount
-    if (charge.amount_refunded === charge.amount) {
-      // Full refund
-      payment.paymentStatus = PaymentStatus.REFUNDED;
-      const order = payment.order;
-      order.paymentStatus = OrderPaymentStatus.REFUNDED;
-      await queryRunner.manager.save(Order, order);
-    } else {
-      // Partial refund
-      payment.paymentStatus = PaymentStatus.PARTIALLY_REFUNDED;
-    }
-
-    payment.metadata = {
-      ...payment.metadata,
-      refundAmount: charge.amount_refunded,
-      refundedAt: new Date().toISOString(),
+    const url = `${this.mpesaBaseUrl}/mpesa/b2c/v1/paymentrequest`;
+    const payload = {
+      InitiatorName: this.mpesaInitiatorName,
+      SecurityCredential: securityCredential,
+      CommandID: commandID,
+      Amount: Math.round(amount),
+      PartyA: this.mpesaShortcode,
+      PartyB: phoneNumber.replace(/^\+/, ''),
+      Remarks: `Withdrawal ${transactionId}`,
+      QueueTimeOutURL: `${this.mpesaCallbackUrl}/b2c_timeout`,
+      ResultURL: `${this.mpesaCallbackUrl}/b2c_result`,
+      Occasion: 'Withdrawal',
     };
 
-    await queryRunner.manager.save(Payment, payment);
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(url, payload, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }),
+      );
+
+      this.logger.log(`B2C Initiated for ${phoneNumber}: ${response.data.ConversationID}`);
+
+      return {
+        conversationId: response.data.ConversationID,
+        originatorConversationId: response.data.OriginatorConversationID,
+      };
+    } catch (error: any) {
+      this.logger.error('B2C Failed', error.response?.data);
+      throw new InternalServerErrorException(
+        'Failed to initiate M-Pesa transfer: ' +
+          (error.response?.data?.errorMessage || error.message),
+      );
+    }
   }
 
-  /**
-   * Verify payment status
-   */
+  async handleStripeWebhook(signature: string, payload: Buffer): Promise<{ received: boolean }> {
+    if (!this.stripe) throw new BadRequestException('Stripe is not configured');
+    try {
+      const event = this.stripe.webhooks.constructEvent(
+        payload,
+        signature,
+        this.configService.get<string>('STRIPE_WEBHOOK_SECRET') || '',
+      );
+
+      this.logger.log(`Stripe webhook received: ${event.id} - ${event.type}`);
+
+      switch (event.type) {
+        case 'payment_intent.succeeded': {
+          const intent = event.data.object as Stripe.PaymentIntent;
+          const paymentIntentId = intent.id;
+
+          const queryRunner = this.dataSource.createQueryRunner();
+          await queryRunner.connect();
+          await queryRunner.startTransaction();
+
+          try {
+            const payment = await queryRunner.manager.findOne(Payment, {
+              where: { paymentIntentId },
+              relations: ['order', 'order.event', 'order.event.organizer'],
+            });
+
+            if (!payment) {
+              this.logger.error(`Stripe webhook: payment not found for intent ${paymentIntentId}`);
+              await queryRunner.rollbackTransaction();
+              return { received: true };
+            }
+
+            // Idempotency: if already completed/failed, do nothing
+            if (payment.paymentStatus === PaymentStatus.COMPLETED) {
+              await queryRunner.rollbackTransaction();
+              return { received: true };
+            }
+
+            const order = payment.order;
+            const feePercent =
+              Number(order.platformCommissionPercentage) ||
+              Number(payment.metadata?.feePercentage) ||
+              5;
+            const total = Number(payment.amount);
+            const { fee, net } = this.calculateSplit(total, feePercent);
+
+            // Extract charge id if available
+            payment.paymentStatus = PaymentStatus.COMPLETED;
+            payment.processedAt = new Date();
+            payment.metadata = {
+              ...(payment.metadata ?? {}),
+              stripeEventId: event.id,
+              platformFee: fee,
+              organizerNet: net,
+            };
+
+            order.paymentStatus = OrderPaymentStatus.COMPLETED;
+            order.paymentDate = new Date();
+
+            await queryRunner.manager.save(Payment, payment);
+            await queryRunner.manager.save(Order, order);
+            await queryRunner.commitTransaction();
+
+            // Credit organizer wallet (ledger view of split)
+            try {
+              const organizerUserId = order.event.organizer.userId;
+              await this.walletService.credit(
+                organizerUserId,
+                net,
+                WalletTransactionType.TICKET_SALE,
+                payment.id,
+                { orderId: order.id, feeCharged: fee, source: 'stripe' },
+              );
+              this.logger.log(
+                `Stripe webhook: wallet credited ${net} for user ${organizerUserId} (payment ${payment.id})`,
+              );
+            } catch (walletError) {
+              this.logger.error(
+                `Stripe webhook: failed to credit wallet for payment ${payment.id}`,
+                walletError as any,
+              );
+            } finally {
+              await queryRunner.release();
+            }
+
+            break;
+          } catch (err) {
+            if (queryRunner.isTransactionActive) {
+              await queryRunner.rollbackTransaction();
+            }
+            await queryRunner.release();
+            this.logger.error('Stripe webhook processing failed (succeeded)', err as any);
+            throw err;
+          }
+        }
+
+        case 'payment_intent.payment_failed': {
+          const intent = event.data.object as Stripe.PaymentIntent;
+          const paymentIntentId = intent.id;
+
+          const queryRunner = this.dataSource.createQueryRunner();
+          await queryRunner.connect();
+          await queryRunner.startTransaction();
+
+          try {
+            const payment = await queryRunner.manager.findOne(Payment, {
+              where: { paymentIntentId },
+              relations: ['order'],
+            });
+
+            if (!payment) {
+              this.logger.error(
+                `Stripe webhook: payment not found for failed intent ${paymentIntentId}`,
+              );
+              await queryRunner.rollbackTransaction();
+              return { received: true };
+            }
+
+            // Idempotency
+            if (payment.paymentStatus === PaymentStatus.FAILED) {
+              await queryRunner.rollbackTransaction();
+              return { received: true };
+            }
+
+            const lastError = intent.last_payment_error;
+
+            payment.paymentStatus = PaymentStatus.FAILED;
+            payment.failureReason = lastError?.message ?? 'Stripe payment failed';
+            payment.processedAt = new Date();
+
+            payment.order.paymentStatus = OrderPaymentStatus.FAILED;
+
+            await queryRunner.manager.save(Payment, payment);
+            await queryRunner.manager.save(Order, payment.order);
+            await queryRunner.commitTransaction();
+            await queryRunner.release();
+
+            break;
+          } catch (err) {
+            if (queryRunner.isTransactionActive) {
+              await queryRunner.rollbackTransaction();
+            }
+            await queryRunner.release();
+            this.logger.error('Stripe webhook processing failed (failed)', err as any);
+            throw err;
+          }
+        }
+
+        default:
+          // For other events we just acknowledge receipt
+          this.logger.debug(`Stripe webhook: ignoring event type ${event.type}`);
+      }
+
+      return { received: true };
+    } catch (err: any) {
+      this.logger.warn('Stripe webhook signature verification failed', err.message);
+      throw new BadRequestException('Webhook signature verification failed');
+    }
+  }
+
   async verifyPayment(paymentId: string, userId: string) {
     const payment = await this.paymentRepository.findOne({
-      where: { id: paymentId },
-      relations: ['order', 'user'],
+      where: { id: paymentId, userId },
+      relations: ['order'],
     });
-
-    if (!payment) {
-      throw new NotFoundException('Payment not found');
-    }
-
-    if (payment.userId !== userId) {
-      throw new BadRequestException('You do not have permission to view this payment');
-    }
-
-    return {
-      id: payment.id,
-      status: payment.paymentStatus,
-      amount: payment.amount,
-      currency: payment.currency,
-      method: payment.paymentMethod,
-      transactionId: payment.transactionId,
-      processedAt: payment.processedAt,
-    };
+    if (!payment) throw new NotFoundException('Payment not found');
+    return payment;
   }
 }

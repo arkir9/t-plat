@@ -1,4 +1,12 @@
-import { IsString, IsNumber, IsOptional, IsDateString, IsBoolean, Min, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsDateString,
+  IsBoolean,
+  Min,
+  IsEnum,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../entities/ticket-type.entity';
 

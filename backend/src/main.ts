@@ -58,10 +58,7 @@ async function bootstrap() {
   });
 
   // Global Filters
-  app.useGlobalFilters(
-    new AllExceptionsFilter(),
-    new DatabaseExceptionFilter(),
-  );
+  app.useGlobalFilters(new AllExceptionsFilter(), new DatabaseExceptionFilter());
 
   // Global Interceptors
   app.useGlobalInterceptors(
@@ -111,7 +108,7 @@ async function bootstrap() {
       .addTag('health', 'Health checks')
       .addServer(configService.get<string>('API_URL', 'http://localhost:3000'))
       .build();
-    
+
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, document, {
       swaggerOptions: {
@@ -127,7 +124,9 @@ async function bootstrap() {
   logger.log(`API Documentation: http://localhost:${port}/api/docs`);
   logger.log(`Health (DB + app): http://localhost:${port}/api/health`);
   logger.log(`Environment: ${configService.get<string>('NODE_ENV', 'development')}`);
-  logger.log(`Database: connected (TypeORM). Registered entities: users, events, tickets, payments, etc.`);
+  logger.log(
+    `Database: connected (TypeORM). Registered entities: users, events, tickets, payments, etc.`,
+  );
 }
 
 bootstrap().catch((error) => {

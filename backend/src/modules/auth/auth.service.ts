@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -36,13 +33,16 @@ export class AuthService {
     // Check if user already exists
     const existingUser = await this.usersRepository.findOne({
       where: phone ? [{ email }, { phone }] : [{ email }],
+      relations: ['organizerProfiles'],
     });
 
     if (existingUser) {
       // Verify password and sign them in
       const isPasswordValid = await bcrypt.compare(password, existingUser.passwordHash);
       if (!isPasswordValid) {
-        throw new UnauthorizedException('An account with this email already exists. Please use the correct password to sign in.');
+        throw new UnauthorizedException(
+          'An account with this email already exists. Please use the correct password to sign in.',
+        );
       }
       const tokens = await this.generateTokens(existingUser.id);
       return {
@@ -75,9 +75,10 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    // Find user
+    // Find user with organizer profiles (for role / claim UI)
     const user = await this.usersRepository.findOne({
       where: { email },
+      relations: ['organizerProfiles'],
     });
 
     if (!user) {
@@ -100,7 +101,9 @@ export class AuthService {
     };
   }
 
-  async loginWithGoogle(dto: GoogleAuthDto): Promise<{ user: Partial<User>; accessToken: string; refreshToken: string }> {
+  async loginWithGoogle(
+    dto: GoogleAuthDto,
+  ): Promise<{ user: Partial<User>; accessToken: string; refreshToken: string }> {
     const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (!googleClientId) {
       throw new UnauthorizedException('Google Sign-In is not configured');
@@ -128,7 +131,9 @@ export class AuthService {
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
-  async loginWithApple(dto: AppleAuthDto): Promise<{ user: Partial<User>; accessToken: string; refreshToken: string }> {
+  async loginWithApple(
+    dto: AppleAuthDto,
+  ): Promise<{ user: Partial<User>; accessToken: string; refreshToken: string }> {
     const appleJwks = createRemoteJWKSet(new URL(APPLE_JWKS_URL));
     let payload: { sub: string; email?: string };
     try {
@@ -266,6 +271,10 @@ export class AuthService {
 
   private sanitizeUser(user: User) {
     const { passwordHash, ...rest } = user;
-    return rest;
+    const profiles = (rest as any).organizerProfiles;
+    return {
+      ...rest,
+      role: profiles?.length ? 'organizer' : 'user',
+    };
   }
 }

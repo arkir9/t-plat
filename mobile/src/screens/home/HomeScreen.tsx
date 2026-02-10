@@ -15,19 +15,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
-  Home,
   MapPin,
-  Ticket,
-  Heart,
-  User,
+  Calendar,
   Search,
   Filter,
-  ChevronLeft,
-  Share,
-  Calendar,
   ShieldCheck,
+  Globe,
 } from 'lucide-react-native';
-import { eventsService, Event } from '../../services/eventsService';
+import { eventsService } from '../../services/eventsService';
+import type { Event } from '../../types';
 import { format } from 'date-fns';
 
 const COLORS = {
@@ -38,21 +34,25 @@ const COLORS = {
   textPrimary: '#1A1A1A',
   textSecondary: '#666666',
   textLight: '#999999',
-  success: '#10B981',
-  error: '#EF4444',
   white: '#FFFFFF',
+  verified: '#10B981',
+  unverified: 'rgba(0,0,0,0.6)', 
 };
 
-const SPACING = {
-  s: 8,
-  m: 16,
-  l: 24,
-  xl: 32,
-};
+const SPACING = { s: 8, m: 16, l: 24, xl: 32 };
 
-const CATEGORIES = ['All', 'Recommended', 'Today', 'This Weekend', 'Music', 'Tech', 'Arts', 'Food'];
+// --- UPDATED CATEGORIES ---
+const CATEGORIES = [
+    'All', 
+    'Recommended', 
+    'Nightlife', 
+    'Concerts', 
+    'Festivals', 
+    'Arts', 
+    'Sports', 
+    'Business'
+];
 
-// Helper function to format event date
 const formatEventDate = (dateString: string) => {
   try {
     const date = new Date(dateString);
@@ -62,20 +62,21 @@ const formatEventDate = (dateString: string) => {
   }
 };
 
-// Helper function to format price
 const formatPrice = (price?: number, currency?: string) => {
   if (!price || price === 0) return 'Free';
   const currencySymbol = currency === 'USD' ? '$' : 'KES';
   return `${currencySymbol} ${price.toLocaleString()}`;
 };
 
-// Helper function to get location string
 const getLocationString = (event: Event) => {
   if (event.locationType === 'venue' && event.venueId) {
-    return 'Venue'; // Would need to fetch venue details
+    return 'Venue'; 
   }
   if (event.customLocation) {
-    return `${event.customLocation.address}, ${event.customLocation.city}`;
+    const { address, city } = event.customLocation;
+    if (address && city) return `${address}, ${city}`;
+    if (address) return address;
+    if (city) return city;
   }
   return 'Location TBD';
 };
@@ -92,17 +93,29 @@ const CategoryChip = ({ label, active, onPress }: { label: string; active: boole
 const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) => {
   const location = getLocationString(event);
   const formattedDate = formatEventDate(event.startDate);
-  const price = formatPrice(event.price, event.currency);
+  // Support both price field or ticketTypes array
+  const price = event.ticketTypes?.[0]?.price 
+    ? `KES ${event.ticketTypes[0].price}` 
+    : formatPrice(event.price, event.currency);
+
+  const isOfficial = event.isClaimed || event.source === 'internal';
+  const imageUri = event.images?.[0];
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
-      {event.image ? (
-        <Image source={{ uri: event.image }} style={styles.cardImage} />
-      ) : (
-        <View style={[styles.cardImage, { backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center' }]}>
-          <Calendar size={32} color={COLORS.textLight} />
+      <View style={styles.imageContainer}>
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={styles.cardImage} />
+        ) : (
+          <View style={[styles.cardImage, { backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center' }]}>
+            <Calendar size={32} color={COLORS.textLight} />
+          </View>
+        )}
+        <View style={[styles.badge, { backgroundColor: isOfficial ? COLORS.verified : COLORS.unverified }]}>
+          {isOfficial ? <ShieldCheck size={14} color="white" /> : <Globe size={14} color="white" />}
         </View>
-      )}
+      </View>
+
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle} numberOfLines={2}>{event.title}</Text>
         
@@ -118,9 +131,7 @@ const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) =>
 
         <View style={styles.cardFooter}>
           <Text style={styles.cardPrice}>{price}</Text>
-          {event.category && (
-            <Text style={styles.cardOrganizer}>{event.category}</Text>
-          )}
+          {!isOfficial && <Text style={styles.sourceText}>via {event.source}</Text>}
         </View>
       </View>
     </TouchableOpacity>
@@ -138,69 +149,40 @@ export function HomeScreen() {
 
   const loadEvents = useCallback(async (refresh = false) => {
     try {
-      if (refresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
+      if (refresh) setIsRefreshing(true);
+      else setIsLoading(true);
 
-      // Load featured events (backend returns { data, total, page, limit })
       const featuredResponse = await eventsService.getFeaturedEvents({ limit: 5 }).catch(() => null);
-      const featured = featuredResponse?.data ?? [];
-      if (Array.isArray(featured)) setFeaturedEvents(featured);
+      if (featuredResponse?.data) setFeaturedEvents(featuredResponse.data);
 
-      // Special case: Recommended category uses personalized endpoint
       if (activeCategory === 'Recommended') {
         const response = await eventsService.getRecommendedEvents(20).catch(() => null);
-        const list = response?.data ?? [];
-        if (Array.isArray(list)) setEvents(list);
+        if (response?.data) setEvents(response.data);
         return;
       }
 
-      // Build query params for regular discovery feed
-      const params: any = {
-        page: 1,
-        limit: 20,
-        status: 'published',
-      };
+      const params: any = { page: 1, limit: 20, status: 'published' };
 
-      // Apply category filter (backend accepts startDate = startDateFrom, endDate = startDateTo)
       if (activeCategory !== 'All') {
-        if (activeCategory === 'Today') {
-          const today = new Date();
-          const startOfDay = new Date(today);
-          startOfDay.setHours(0, 0, 0, 0);
-          const endOfDay = new Date(today);
-          endOfDay.setHours(23, 59, 59, 999);
-          params.startDate = startOfDay.toISOString();
-          params.endDate = endOfDay.toISOString();
-        } else if (activeCategory === 'This Weekend') {
-          const today = new Date();
-          const startOfDay = new Date(today);
-          startOfDay.setHours(0, 0, 0, 0);
-          const weekend = new Date(today);
-          weekend.setDate(today.getDate() + (6 - today.getDay())); // Next Saturday
-          weekend.setHours(23, 59, 59, 999);
-          params.startDate = startOfDay.toISOString();
-          params.endDate = weekend.toISOString();
-        } else if (activeCategory !== 'Recommended') {
-          params.category = activeCategory.toLowerCase();
-        }
+          let typeParam = activeCategory.toLowerCase();
+          
+          if (activeCategory === 'Arts') typeParam = 'arts_culture';
+          if (activeCategory === 'Concerts') typeParam = 'concert';
+          if (activeCategory === 'Festivals') typeParam = 'festival';
+          // Nightlife maps directly to 'nightlife', Sports to 'sports', etc.
+          
+          // Use the new EventType column for filtering
+          params.eventType = typeParam;
       }
 
-      // Apply search
       if (searchQuery.trim()) {
         params.search = searchQuery.trim();
       }
 
       const response = await eventsService.getEvents(params).catch(() => null);
-      const list = response?.data ?? [];
-      if (Array.isArray(list)) setEvents(list);
+      if (response?.data) setEvents(response.data);
     } catch (error: any) {
       console.error('Failed to load events:', error);
-      try {
-        Alert.alert('Error', 'Failed to load events. Please try again.');
-      } catch (_) {}
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -211,22 +193,14 @@ export function HomeScreen() {
     loadEvents();
   }, [loadEvents]);
 
-  const onRefresh = useCallback(() => {
-    loadEvents(true);
-  }, [loadEvents]);
-
   const handleSearch = (text: string) => {
+    // Just update the search query; the debounced effect is handled
+    // by the memoized `loadEvents` function and the useEffect above.
     setSearchQuery(text);
-    // Debounce search - reload after user stops typing
-    const timer = setTimeout(() => {
-      loadEvents();
-    }, 500);
-    return () => clearTimeout(timer);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.logoText}>plat</Text>
         <View style={styles.locationContainer}>
@@ -235,13 +209,12 @@ export function HomeScreen() {
         </View>
       </View>
 
-      {/* Search Bar */}
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Search size={20} color={COLORS.textLight} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search events, venues..."
+            placeholder="Search events..."
             placeholderTextColor={COLORS.textLight}
             value={searchQuery}
             onChangeText={handleSearch}
@@ -252,7 +225,6 @@ export function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Categories */}
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesList}>
           {CATEGORIES.map((cat) => (
@@ -266,10 +238,9 @@ export function HomeScreen() {
         </ScrollView>
       </View>
 
-      {/* Featured Events Section */}
       {featuredEvents.length > 0 && (
         <View style={styles.featuredSection}>
-          <Text style={styles.sectionTitle}>Featured Events</Text>
+          <Text style={styles.sectionTitle}>Featured</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredList}>
             {featuredEvents.map((event) => (
               <TouchableOpacity
@@ -277,14 +248,9 @@ export function HomeScreen() {
                 style={styles.featuredCard}
                 onPress={() => navigation.navigate('EventDetail', { eventId: event.id, event })}
               >
-                {event.image ? (
-                  <Image source={{ uri: event.image }} style={styles.featuredImage} />
-                ) : (
-                  <View style={[styles.featuredImage, { backgroundColor: COLORS.surface }]} />
-                )}
+                <Image source={{ uri: event.images?.[0] || 'https://via.placeholder.com/200' }} style={styles.featuredImage} />
                 <View style={styles.featuredContent}>
-                  <Text style={styles.featuredTitle} numberOfLines={2}>{event.title}</Text>
-                  <Text style={styles.featuredDate}>{formatEventDate(event.startDate)}</Text>
+                  <Text style={styles.featuredTitle} numberOfLines={1}>{event.title}</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -292,16 +258,9 @@ export function HomeScreen() {
         </View>
       )}
 
-      {/* Event List */}
-      {isLoading && events.length === 0 ? (
+      {isLoading && !isRefreshing ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.accent} />
-          <Text style={styles.loadingText}>Loading events...</Text>
-        </View>
-      ) : events.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No events found</Text>
-          <Text style={styles.emptySubtext}>Try adjusting your search or filters</Text>
         </View>
       ) : (
         <FlatList
@@ -315,12 +274,12 @@ export function HomeScreen() {
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadEvents(true)} />}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No events found</Text>
+            </View>
           }
-          initialNumToRender={8}
-          windowSize={5}
-          removeClippedSubviews
         />
       )}
     </SafeAreaView>
@@ -328,207 +287,40 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: SPACING.m,
-    paddingVertical: SPACING.s,
-  },
-  logoText: {
-    fontSize: 28,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    color: COLORS.primary,
-  },
-  locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.surface,
-    padding: 6,
-    borderRadius: 16,
-  },
-  locationText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.textPrimary,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: SPACING.m,
-    gap: SPACING.s,
-    marginBottom: SPACING.m,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: SPACING.m,
-    height: 48,
-    borderRadius: 24,
-    gap: SPACING.s,
-  },
-  placeholderText: {
-    color: COLORS.textLight,
-    flex: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-  },
-  filterButton: {
-    width: 48,
-    height: 48,
-    backgroundColor: COLORS.surface,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  categoriesList: {
-    paddingHorizontal: SPACING.m,
-    paddingBottom: SPACING.m,
-    gap: SPACING.s,
-  },
-  chip: {
-    paddingHorizontal: SPACING.m,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  chipActive: {
-    backgroundColor: COLORS.primary,
-  },
-  chipText: {
-    color: COLORS.textPrimary,
-    fontWeight: '500',
-  },
-  chipTextActive: {
-    color: COLORS.white,
-  },
-  listContent: {
-    paddingHorizontal: SPACING.m,
-    paddingBottom: 80,
-  },
-  card: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.white,
-    marginBottom: SPACING.m,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
-    paddingBottom: SPACING.m,
-  },
-  cardImage: {
-    width: 120,
-    height: 140,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-  },
-  cardContent: {
-    flex: 1,
-    marginLeft: SPACING.m,
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    lineHeight: 22,
-  },
-  cardMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  cardMetaText: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-  },
-  cardFooter: {
-    marginTop: 4,
-  },
-  cardPrice: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-  },
-  cardOrganizer: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginTop: 2,
-  },
-  featuredSection: {
-    marginBottom: SPACING.m,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    paddingHorizontal: SPACING.m,
-    marginBottom: SPACING.s,
-  },
-  featuredList: {
-    paddingHorizontal: SPACING.m,
-    gap: SPACING.m,
-  },
-  featuredCard: {
-    width: 280,
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginRight: SPACING.m,
-  },
-  featuredImage: {
-    width: '100%',
-    height: 160,
-    backgroundColor: COLORS.surface,
-  },
-  featuredContent: {
-    padding: SPACING.m,
-  },
-  featuredTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    marginBottom: 4,
-  },
-  featuredDate: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: SPACING.xl,
-  },
-  loadingText: {
-    marginTop: SPACING.m,
-    color: COLORS.textSecondary,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: SPACING.xl,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.s,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.m, paddingVertical: SPACING.s },
+  logoText: { fontSize: 28, fontWeight: '800', fontStyle: 'italic', color: COLORS.primary },
+  locationContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.surface, padding: 6, borderRadius: 16 },
+  locationText: { fontSize: 12, fontWeight: '600', color: COLORS.textPrimary },
+  searchContainer: { flexDirection: 'row', paddingHorizontal: SPACING.m, gap: SPACING.s, marginBottom: SPACING.m },
+  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, paddingHorizontal: SPACING.m, height: 48, borderRadius: 24, gap: SPACING.s },
+  searchInput: { flex: 1, fontSize: 16, color: COLORS.textPrimary },
+  filterButton: { width: 48, height: 48, backgroundColor: COLORS.surface, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  categoriesList: { paddingHorizontal: SPACING.m, paddingBottom: SPACING.m, gap: SPACING.s },
+  chip: { paddingHorizontal: SPACING.m, paddingVertical: 8, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: 'transparent' },
+  chipActive: { backgroundColor: COLORS.primary },
+  chipText: { color: COLORS.textPrimary, fontWeight: '500' },
+  chipTextActive: { color: COLORS.white },
+  listContent: { paddingHorizontal: SPACING.m, paddingBottom: 80 },
+  card: { flexDirection: 'row', backgroundColor: COLORS.white, marginBottom: SPACING.m, borderBottomWidth: 1, borderBottomColor: COLORS.surface, paddingBottom: SPACING.m },
+  imageContainer: { width: 120, height: 140, position: 'relative' },
+  cardImage: { width: '100%', height: '100%', borderRadius: 12, backgroundColor: COLORS.surface },
+  badge: { position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  cardContent: { flex: 1, marginLeft: SPACING.m, justifyContent: 'space-between', paddingVertical: 4 },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textPrimary },
+  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardMetaText: { fontSize: 13, color: COLORS.textSecondary },
+  cardFooter: { marginTop: 4 },
+  cardPrice: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary },
+  sourceText: { fontSize: 11, color: COLORS.textLight, fontStyle: 'italic', marginTop: 2 },
+  featuredSection: { marginBottom: SPACING.m },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginLeft: SPACING.m, marginBottom: SPACING.s },
+  featuredList: { paddingHorizontal: SPACING.m },
+  featuredCard: { marginRight: SPACING.m, width: 200 },
+  featuredImage: { width: 200, height: 120, borderRadius: 12, marginBottom: 4 },
+  featuredContent: {},
+  featuredTitle: { fontWeight: 'bold' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 },
+  emptyContainer: { alignItems: 'center', marginTop: 40 },
+  emptyText: { color: COLORS.textSecondary },
 });

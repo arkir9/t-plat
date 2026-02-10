@@ -1,139 +1,164 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
   ScrollView,
-  ActivityIndicator,
+  TouchableOpacity,
+  Image,
 } from 'react-native';
-import { ChevronLeft, BarChart3, Calendar, Ticket, Plus } from 'lucide-react-native';
-import { eventsService, Event } from '../../services/eventsService';
-import { organizersService, OrganizerProfile } from '../../services/organizersService';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { 
+  ChevronLeft, 
+  Settings, 
+  Calendar, 
+  BarChart3, 
+  Wallet, // <--- NEW IMPORT
+  Users, 
+  ScanLine, 
+  ChevronRight,
+  Plus 
+} from 'lucide-react-native';
+import { useAuthStore } from '../../store/authStore';
 
 const COLORS = {
   primary: '#000000',
   accent: '#8B5CF6',
   background: '#FFFFFF',
   surface: '#F5F5F5',
-  textPrimary: '#1A1A1A',
+  text: '#1A1A1A',
   textSecondary: '#666666',
+  border: '#E5E7EB',
 };
 
 export function PlatProDashboardScreen({ navigation }: any) {
-  const [loading, setLoading] = useState(true);
-  const [profiles, setProfiles] = useState<OrganizerProfile[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [p, myEvents] = await Promise.all([
-          organizersService.getMyProfiles().catch(() => []),
-          eventsService.getMyEvents().catch(() => []),
-        ]);
-        setProfiles(Array.isArray(p) ? p : []);
-        setEvents(Array.isArray(myEvents?.items ?? myEvents) ? (myEvents.items ?? myEvents) : []);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-
-  const upcoming = events.filter((e) => new Date(e.startDate) > new Date());
-  const past = events.filter((e) => new Date(e.startDate) <= new Date());
+  const { user } = useAuthStore();
+  const organizerName = user?.firstName ? `${user.firstName}'s Dashboard` : 'Organizer Dashboard';
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <ChevronLeft color={COLORS.primary} size={24} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Plat Pro dashboard</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle}>Plat Pro</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+          <Settings color={COLORS.primary} size={24} />
+        </TouchableOpacity>
       </View>
 
-      {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={COLORS.accent} />
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Profile Summary */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileInfo}>
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarText}>{user?.firstName?.[0] || 'O'}</Text>
+            </View>
+            <View>
+              <Text style={styles.profileName}>{organizerName}</Text>
+              <Text style={styles.profileRole}>Verified Organizer</Text>
+            </View>
+          </View>
+          <TouchableOpacity 
+            style={styles.createButton}
+            onPress={() => navigation.navigate('PlatProCreateEvent')}
+          >
+            <Plus color="white" size={20} />
+            <Text style={styles.createButtonText}>New Event</Text>
+          </TouchableOpacity>
         </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* Summary cards */}
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Upcoming events</Text>
-              <Text style={styles.summaryValue}>{upcoming.length}</Text>
-            </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Past events</Text>
-              <Text style={styles.summaryValue}>{past.length}</Text>
-            </View>
-          </View>
 
-          {/* Profiles quick view */}
-          {profiles.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Your Plat Pro profiles</Text>
-              {profiles.map((p) => (
-                <View key={p.id} style={styles.profileRow}>
-                  <View style={styles.profileAvatar}>
-                    <Text style={styles.profileAvatarText}>{p.name[0].toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.profileName}>{p.name}</Text>
-                    <Text style={styles.profileMeta}>
-                      {p.profileType === 'event_organizer' ? 'Event organizer' : 'Venue / club'} ·{' '}
-                      {p.verificationStatus === 'verified'
-                        ? 'Verified'
-                        : p.verificationStatus === 'rejected'
-                        ? 'Rejected'
-                        : 'Pending review'}
-                    </Text>
-                  </View>
+        {/* Analytics Preview (Mock) */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Total Sales</Text>
+            <Text style={styles.statValue}>KES 0</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Tickets Sold</Text>
+            <Text style={styles.statValue}>0</Text>
+          </View>
+        </View>
+
+        {/* Menu Items */}
+        <Text style={styles.sectionTitle}>Management</Text>
+        <View style={styles.menuContainer}>
+          
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('PlatProEvents')}
+          >
+            <View style={[styles.menuIconBox, { backgroundColor: '#EDE9FE' }]}>
+              <Calendar size={24} color={COLORS.accent} />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>My Events</Text>
+              <Text style={styles.menuSubtitle}>Manage listings & details</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          {/* --- NEW WALLET BUTTON --- */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('Wallet')}
+          >
+            <View style={[styles.menuIconBox, { backgroundColor: '#F0FDF4' }]}>
+              <Wallet size={24} color="#16A34A" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>My Wallet</Text>
+              <Text style={styles.menuSubtitle}>Withdraw earnings</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+          {/* ------------------------- */}
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+            <View style={[styles.menuIconBox, { backgroundColor: '#E0F2FE' }]}>
+              <BarChart3 size={24} color="#0284C7" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Analytics</Text>
+              <Text style={styles.menuSubtitle}>Sales & traffic insights</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => {}}>
+            <View style={[styles.menuIconBox, { backgroundColor: '#FEF3C7' }]}>
+              <ScanLine size={24} color="#D97706" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Check-in Scanner</Text>
+              <Text style={styles.menuSubtitle}>Scan attendee tickets</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+
+        </View>
+
+        <Text style={styles.sectionTitle}>Support</Text>
+        <View style={styles.menuContainer}>
+             <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('SafetyCenter')}>
+                <View style={[styles.menuIconBox, { backgroundColor: '#FEE2E2' }]}>
+                  <Users size={24} color="#DC2626" />
                 </View>
-              ))}
-            </View>
-          )}
-
-          {/* Quick links */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Manage</Text>
-            <TouchableOpacity
-              style={styles.rowButton}
-              onPress={() => navigation.navigate('PlatProEvents')}
-            >
-              <View style={styles.rowLeft}>
-                <Calendar size={20} color={COLORS.primary} />
-                <Text style={styles.rowLabel}>My events</Text>
-              </View>
-              <Text style={styles.rowMeta}>{events.length} total</Text>
+                <View style={styles.menuContent}>
+                  <Text style={styles.menuTitle}>Organizer Support</Text>
+                  <Text style={styles.menuSubtitle}>Help & resources</Text>
+                </View>
+                <ChevronRight size={20} color={COLORS.textSecondary} />
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.rowButton}
-              onPress={() => navigation.navigate('PlatProCreateEvent')}
-            >
-              <View style={styles.rowLeft}>
-                <Plus size={20} color={COLORS.primary} />
-                <Text style={styles.rowLabel}>Create new event</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Simple placeholder analytics */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Insights (coming soon)</Text>
-            <View style={styles.analyticsCard}>
-              <BarChart3 size={20} color={COLORS.accent} />
-              <Text style={styles.analyticsText}>
-                You’ll soon see attendees, revenue, and top events here.
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-      )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -147,56 +172,66 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
+    borderBottomColor: COLORS.border,
   },
-  headerTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.textPrimary },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 16, paddingBottom: 32 },
-  summaryRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
-  summaryCard: {
-    flex: 1,
+  backButton: { padding: 4 },
+  headerTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.text },
+  content: { padding: 16, paddingBottom: 40 },
+  
+  profileCard: {
+    marginBottom: 24,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 12,
-  },
-  summaryLabel: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 4 },
-  summaryValue: { fontSize: 20, fontWeight: '700', color: COLORS.textPrimary },
-  section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: COLORS.textPrimary },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-  },
-  profileAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  profileAvatarText: { fontWeight: '700', color: COLORS.textPrimary },
-  profileName: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary },
-  profileMeta: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  rowButton: {
+    padding: 16,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
   },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rowLabel: { fontSize: 15, color: COLORS.textPrimary },
-  rowMeta: { fontSize: 13, color: COLORS.textSecondary },
-  analyticsCard: {
+  profileInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatarPlaceholder: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: COLORS.accent,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  avatarText: { color: 'white', fontSize: 20, fontWeight: 'bold' },
+  profileName: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
+  profileRole: { fontSize: 13, color: COLORS.textSecondary },
+  createButton: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderRadius: 20,
+  },
+  createButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
+
+  statsRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  statCard: {
+    flex: 1, backgroundColor: COLORS.surface,
+    padding: 16, borderRadius: 16,
+    alignItems: 'center',
+  },
+  statLabel: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
+  statValue: { fontSize: 18, fontWeight: 'bold', color: COLORS.text },
+
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12, color: COLORS.text },
+  menuContainer: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    padding: 16,
   },
-  analyticsText: { fontSize: 13, color: COLORS.textSecondary, flex: 1 },
+  menuIconBox: {
+    width: 40, height: 40,
+    borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 16,
+  },
+  menuContent: { flex: 1 },
+  menuTitle: { fontSize: 16, fontWeight: '600', color: COLORS.text },
+  menuSubtitle: { fontSize: 13, color: COLORS.textSecondary },
+  divider: { height: 1, backgroundColor: COLORS.border, marginLeft: 72 },
 });
-

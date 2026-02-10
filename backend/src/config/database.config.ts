@@ -50,8 +50,7 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
   const password = (process.env.DB_PASSWORD || '').trim() || 'postgres';
   const dbSslEnv = (process.env.DB_SSL || '').toLowerCase();
   const dbSslEnabled =
-    dbSslEnv === 'true' ||
-    (process.env.NODE_ENV === 'production' && dbSslEnv !== 'false');
+    dbSslEnv === 'true' || (process.env.NODE_ENV === 'production' && dbSslEnv !== 'false');
 
   return {
     type: 'postgres',
@@ -64,7 +63,7 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
     migrations: [join(__dirname, '../migrations/*{.ts,.js}')],
     synchronize: process.env.DB_SYNCHRONIZE === 'true' || false,
     logging: process.env.DB_LOGGING === 'true' || true,
-    
+
     // Connection Pool Settings for Scalability
     extra: {
       max: parseInt(process.env.DB_POOL_MAX || '20'), // Maximum pool size
@@ -72,14 +71,14 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
       idleTimeoutMillis: parseInt(process.env.DB_IDLE_TIMEOUT || '30000'),
       connectionTimeoutMillis: parseInt(process.env.DB_CONNECTION_TIMEOUT || '10000'),
     },
-    
+
     // Retry Configuration
     retryAttempts: parseInt(process.env.DB_RETRY_ATTEMPTS || '3'),
     retryDelay: parseInt(process.env.DB_RETRY_DELAY || '3000'),
-    
+
     // SSL for Production (override with DB_SSL=true/false)
     ssl: dbSslEnabled ? { rejectUnauthorized: false } : false,
-    
+
     // Cache Configuration
     cache: {
       duration: parseInt(process.env.DB_CACHE_DURATION || '30000'),

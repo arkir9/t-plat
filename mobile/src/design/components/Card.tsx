@@ -72,10 +72,9 @@ export const Card: React.FC<CardProps> = ({
         style={[
           baseStyle,
           {
-            backgroundColor: colors.overlay.light,
+            backgroundColor: theme.colors.overlay.light,
             borderWidth: 1,
             borderColor: colors.border,
-            backdropFilter: 'blur(20px)', // Note: This works on web, iOS needs BlurView
           },
           style,
         ]}

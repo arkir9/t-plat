@@ -121,7 +121,7 @@ export const Input: React.FC<InputProps> = ({
         };
       case 'glass':
         return {
-          backgroundColor: colors.overlay.light,
+          backgroundColor: theme.colors.overlay.light,
           borderWidth: 1,
           borderColor: borderColor,
         };

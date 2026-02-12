@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   ScrollView,
   KeyboardAvoidingView,
@@ -336,12 +337,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) =>
             >
               <Body style={styles.signInText}>
                 Already have an account?{' '}
-                <Body 
-                  style={styles.signInLink}
-                  onPress={() => navigation.navigate('Login')}
-                >
-                  Sign In
-                </Body>
+                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                  <Text style={styles.signInLink}>Sign In</Text>
+                </TouchableOpacity>
               </Body>
             </Animated.View>
           </ScrollView>

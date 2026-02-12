@@ -1,116 +1,76 @@
-// mobile/src/types/index.ts
-
-// User Types
 export interface User {
   id: string;
   email: string;
-  phone?: string;
   firstName?: string;
   lastName?: string;
-  profileImageUrl?: string;
-  emailVerified: boolean;
-  phoneVerified: boolean;
-  role?: 'user' | 'organizer' | 'admin'; // Added role for permission checks
+  phone?: string;
+  role: 'user' | 'organizer' | 'admin';
+  avatar?: string;
 }
 
-// Event Types
-export interface Event {
-  id: string;
-  title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  location: EventLocation;
-  // Backend EventResponseDto also exposes these for filtering/location:
-  locationType?: 'venue' | 'custom';
-  customLocation?: {
-    address?: string;
-    city?: string;
-    country?: string;
-    latitude?: number;
-    longitude?: number;
-  };
-  venueId?: string;
-  images: string[];
-  ageRestriction?: string;
-  dressCode?: string;
-  // Simple pricing summary used on some lists (in addition to ticketTypes)
-  price?: number;
-  currency?: 'KES' | 'USD';
-  ticketTypes: TicketType[];
-  organizer: OrganizerProfile;
-  venue?: VenueProfile;
-
-  // --- NEW HYBRID FIELDS ---
-  isClaimed: boolean;            // True if owned by a real organizer
-  source: 'internal' | 'ticketmaster' | 'eventbrite' | 'predicthq';
-  externalUrl?: string;          // Link to original source if unclaimed
-  // ------------------------
+export interface CustomLocation {
+  address: string;
+  city: string;
+  country: string;
+  latitude: number;
+  longitude: number;
 }
 
-export interface EventLocation {
-  type: 'venue' | 'custom';
-  address?: string;
-  city?: string;
-  latitude?: number;
-  longitude?: number;
-}
-
-// Organizer Types
-export interface OrganizerProfile {
+export interface VenueProfile {
   id: string;
   name: string;
-  bio?: string;
-  logoUrl?: string;
-  profileType: 'event_organizer' | 'venue_organizer';
-  isVerified?: boolean; // Visual trust flag
+  venueCity?: string;
+  venueAddress?: string;
+  venueLatitude?: number;
+  venueLongitude?: number;
 }
 
-export interface VenueProfile extends OrganizerProfile {
-  address?: string;
-  city?: string;
-  capacity?: number;
-  amenities?: string[];
-}
-
-// Ticket Types
 export interface TicketType {
   id: string;
   name: string;
+  description?: string;
   price: number;
-  currency: 'KES' | 'USD';
-  quantityAvailable: number;
-  quantitySold: number;
+  currency: string;
+  totalQuantity: number;
+  availableQuantity: number;
+  saleStartDate?: string;
+  saleEndDate?: string;
 }
 
-export interface Ticket {
+export interface Event {
   id: string;
-  eventId: string;
-  ticketTypeId: string;
-  qrCode: string;
-  status: 'active' | 'used' | 'cancelled' | 'refunded';
-  checkedInAt?: string;
-}
+  title: string;
+  description?: string;
+  startDate: string;
+  endDate: string;
+  images?: string[];
+  
+  // --- Hybrid Strategy Fields ---
+  source: 'internal' | 'scraped' | 'predicthq' | 'ticketmaster' | 'hustlesasa';
+  isClaimed: boolean;
+  externalUrl?: string;
+  
+  // --- Location ---
+  locationType: 'venue' | 'custom';
+  venue?: VenueProfile;
+  customLocation?: CustomLocation;
+  location?: any; 
 
-// Order Types
-export interface Order {
-  id: string;
-  orderNumber: string;
-  totalAmount: number;
-  currency: 'KES' | 'USD';
-  paymentStatus: 'pending' | 'completed' | 'failed' | 'refunded';
-  tickets: Ticket[];
-  createdAt: string;
-}
+  // --- Strict Categorization ---
+  eventType: 'concert' | 'festival' | 'nightlife' | 'arts_culture' | 'sports' | 'business' | 'community' | 'other';
+  category?: string;
 
-// Review Types
-export interface Review {
-  id: string;
-  eventId: string;
-  userId: string;
-  rating: number;
-  reviewText?: string;
-  venueRating?: number;
-  organizerRating?: number;
-  createdAt: string;
+  // --- Pricing ---
+  price?: number; 
+  currency?: string;
+  ticketTypes?: TicketType[]; 
+
+  // --- Meta ---
+  organizer?: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
+  status: 'draft' | 'published' | 'cancelled';
+  isFeatured?: boolean;
 }

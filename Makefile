@@ -68,13 +68,17 @@ db-schema: ## Create all tables (run once on empty DB; fast)
 	@cat database/database-schema.sql | docker-compose -f docker-compose.dev.yml exec -T postgres psql -U postgres -d $(DB_NAME)
 	@echo "✅ Base schema applied"
 
-db-migrate-sql: ## Run raw SQL migrations 001+002+003 in one connection
-	@cat database/migrations/001-add-events-missing-columns.sql database/migrations/002-add-oauth-user-columns.sql database/migrations/003-event-advertising-columns.sql | docker-compose -f docker-compose.dev.yml exec -T postgres psql -U postgres -d $(DB_NAME)
-	@echo "✅ SQL migrations (001–003) applied"
+db-migrate-sql: ## Run raw SQL migrations 001–004 in one connection
+	@cat database/migrations/001-add-events-missing-columns.sql database/migrations/002-add-oauth-user-columns.sql database/migrations/003-event-advertising-columns.sql database/migrations/004-create-event-interactions.sql | docker-compose -f docker-compose.dev.yml exec -T postgres psql -U postgres -d $(DB_NAME)
+	@echo "✅ SQL migrations (001–004) applied"
 
 db-seed-events: ## Seed dummy events via Docker (run after db-schema + db-migrate-sql)
 	docker-compose -f docker-compose.dev.yml run --rm --entrypoint "" backend node scripts/seed-events-sql.js
 	@echo "✅ Dummy events seeded"
+
+db-migrate-004: ## Run migration 004 only (event_interactions table) – for existing DBs
+	@cat database/migrations/004-create-event-interactions.sql | docker-compose -f docker-compose.dev.yml exec -T postgres psql -U postgres -d $(DB_NAME)
+	@echo "✅ Migration 004 applied"
 
 db-migrate-seed: db-migrate-sql db-seed-events ## Apply SQL migrations and seed events (fast path; requires db-schema first)
 

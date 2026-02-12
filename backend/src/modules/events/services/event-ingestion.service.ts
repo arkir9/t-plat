@@ -5,11 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Event, EventSource, EventStatus, LocationType, EventType } from '../entities/event.entity';
-
-interface LatLng {
-  lat: number;
-  lng: number;
-}
+import { HustlesasaScraperService } from './hustlesasa-scraper.service';
 
 @Injectable()
 export class EventIngestionService implements OnApplicationBootstrap {
@@ -20,58 +16,177 @@ export class EventIngestionService implements OnApplicationBootstrap {
     private eventRepository: Repository<Event>,
     private httpService: HttpService,
     private configService: ConfigService,
+    private hustlesasaScraper: HustlesasaScraperService,
   ) {}
 
-  private readonly cityCenters: Record<string, LatLng> = {
-    Nairobi: { lat: -1.2921, lng: 36.8219 },
-    'Cape Town': { lat: -33.9249, lng: 18.4241 },
-    Johannesburg: { lat: -26.2041, lng: 28.0473 },
-  };
-
-  /**
-   * Haversine distance between two coordinates in kilometers.
-   */
-  private getDistanceKm(a: LatLng, b: LatLng): number {
-    const R = 6371; // km
-    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-    const lat1 = (a.lat * Math.PI) / 180;
-    const lat2 = (b.lat * Math.PI) / 180;
-
-    const sinDLat = Math.sin(dLat / 2);
-    const sinDLng = Math.sin(dLng / 2);
-    const aa = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
-    const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
-    return R * c;
-  }
-
-  /**
-   * Force a one-time ingestion run when the application boots,
-   * so the mobile app immediately sees external events without
-   * waiting for the scheduled cron.
-   */
   async onApplicationBootstrap(): Promise<void> {
-    this.logger.log('FORCE RUN: Fetching External API Events on Startup...');
-    await this.handleCron();
+    // Run ingestion in background so DB/table issues don't block server startup
+    this.handleCron().catch((err) => {
+      this.logger.warn('Event ingestion failed (server still running):', err?.message || err);
+    });
   }
 
   async handleCron() {
-    this.logger.log('Starting PredictHQ Event Ingestion (general discovery only)...');
+    this.logger.log('Starting Hybrid Event Ingestion...');
 
-    // General discovery for key cities (no targeted venue lookups).
+    // 1. PredictHQ (Global Events)
     await this.fetchGeneralDiscovery('Nairobi', '-1.2921,36.8219');
-    await this.fetchGeneralDiscovery('Cape Town', '-33.9249,18.4241');
-    await this.fetchGeneralDiscovery('Johannesburg', '-26.2041,28.0473');
+
+    // 2. Hustlesasa Auto-Discovery (Powered by SerpApi)
+    await this.runHustlesasaDiscovery('Nairobi');
   }
 
+  /**
+   * 🔎 DISCOVERY ENGINE (SerpApi)
+   */
+  private async runHustlesasaDiscovery(city: string) {
+    const apiKey = this.configService.get('SERPAPI_KEY');
+
+    if (!apiKey) {
+      this.logger.warn('Skipping Hustlesasa Discovery: SERPAPI_KEY missing in .env');
+      return;
+    }
+
+    this.logger.log(`🔍 [SerpApi] Searching for new Hustlesasa stores in ${city}...`);
+    const stores = await this.discoverHustlesasaStores(city, apiKey);
+
+    if (stores.length === 0) {
+      this.logger.log('No new stores found via discovery.');
+      return;
+    }
+
+    this.logger.log(`✅ Found ${stores.length} unique stores. Starting scrape...`);
+
+    // Scrape Each Found Store
+    for (const storeUrl of stores) {
+      await this.ingestHustlesasaEvents(storeUrl);
+    }
+  }
+
+  private async discoverHustlesasaStores(city: string, apiKey: string): Promise<string[]> {
+    // Find sites ending in .hustlesasa.shop that mention the city
+    const query = `site:hustlesasa.shop "${city}"`;
+    const url = 'https://serpapi.com/search.json';
+
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get(url, {
+          params: {
+            engine: 'google',
+            q: query,
+            api_key: apiKey,
+            num: 20,
+            google_domain: 'google.co.ke',
+            gl: 'ke',
+            hl: 'en',
+          },
+        }),
+      );
+
+      if (!data.organic_results) return [];
+
+      const uniqueStores = new Set<string>();
+
+      data.organic_results.forEach((item: any) => {
+        try {
+          const itemUrl = new URL(item.link);
+          const rootStore = `${itemUrl.protocol}//${itemUrl.hostname}`;
+
+          // Filter out main marketing site
+          if (!rootStore.includes('www.hustlesasa.com')) {
+            uniqueStores.add(rootStore);
+          }
+        } catch (e) {
+          // Ignore invalid URLs
+        }
+      });
+
+      return Array.from(uniqueStores);
+    } catch (error: any) {
+      this.logger.error('SerpApi Discovery failed', error.response?.data?.error || error.message);
+      return [];
+    }
+  }
+
+  // --- HUSTLESASA INGESTION ---
+  private async ingestHustlesasaEvents(storeUrl: string) {
+    const scrapedEvents = await this.hustlesasaScraper.scrapeStore(storeUrl);
+    const systemOrganizerId = this.configService.get('SYSTEM_ORGANIZER_ID');
+
+    if (scrapedEvents.length > 0) {
+      this.logger.log(`📍 Processing ${scrapedEvents.length} events from ${storeUrl}`);
+    }
+
+    for (const raw of scrapedEvents) {
+      const existing = await this.eventRepository.findOne({
+        where: { externalUrl: raw.externalUrl },
+      });
+
+      const description =
+        typeof raw.description === 'string'
+          ? this.formatDescription(raw.description)
+          : raw.description || '';
+      const ticketTypes =
+        raw.price > 0
+          ? [{ name: 'General Admission', price: raw.price, currency: 'KES' }]
+          : undefined;
+      const images = this.buildImagesArray(raw);
+
+      if (!existing) {
+        const newEvent = this.eventRepository.create({
+          title: raw.title,
+          description,
+          eventType: raw.eventType,
+          startDate: raw.startDate,
+          endDate: raw.endDate,
+          source: EventSource.SCRAPED,
+          externalUrl: raw.externalUrl,
+          isClaimed: false,
+          ticketTypes,
+          images,
+          status: EventStatus.PUBLISHED,
+          locationType: LocationType.CUSTOM,
+          customLocation: {
+            address: 'Nairobi',
+            city: 'Nairobi',
+            country: 'Kenya',
+            latitude: -1.2921,
+            longitude: 36.8219,
+          },
+          organizerId: systemOrganizerId,
+        });
+
+        try {
+          await this.eventRepository.save(newEvent);
+          this.logger.log(`   + Saved: ${newEvent.title}`);
+        } catch (e: any) {
+          this.logger.error(`   - Failed: ${raw.title}`);
+        }
+      } else if (
+        (!existing.images || existing.images.length === 0) &&
+        images.length > 0
+      ) {
+        try {
+          existing.images = images;
+          if (ticketTypes) existing.ticketTypes = ticketTypes;
+          existing.description = description;
+          await this.eventRepository.save(existing);
+          this.logger.log(`   ↻ Updated images/price: ${existing.title}`);
+        } catch (e: any) {
+          this.logger.warn(`   - Update failed: ${raw.title}`);
+        }
+      }
+    }
+  }
+
+  // --- PREDICTHQ LOGIC ---
   async fetchGeneralDiscovery(cityName: string, latLong: string) {
     const apiKey = this.configService.get('PREDICTHQ_API_KEY');
     if (!apiKey) return;
 
     const url = 'https://api.predicthq.com/v1/events/';
     const params = {
-      'location_around.origin': latLong,
-      'location_around.scale': '20km',
+      within: `50km@${latLong}`,
       category: 'concerts,festivals,performing-arts,expos',
       sort: 'rank',
       limit: 20,
@@ -81,9 +196,6 @@ export class EventIngestionService implements OnApplicationBootstrap {
     await this.executeFetch(url, params, apiKey, cityName, 'General Discovery');
   }
 
-  // Targeted venue searches have been removed; we now rely solely on
-  // general discovery queries so the ingestion surface is simpler and broader.
-
   private async executeFetch(
     url: string,
     params: any,
@@ -92,7 +204,6 @@ export class EventIngestionService implements OnApplicationBootstrap {
     sourceLabel: string,
   ) {
     const systemOrganizerId = this.configService.get('SYSTEM_ORGANIZER_ID');
-
     try {
       const { data } = await firstValueFrom(
         this.httpService.get(url, {
@@ -100,7 +211,6 @@ export class EventIngestionService implements OnApplicationBootstrap {
           params: params,
         }),
       );
-
       const events = data.results || [];
       for (const item of events) {
         await this.processPredictHQEvent(item, systemOrganizerId, cityName);
@@ -111,47 +221,20 @@ export class EventIngestionService implements OnApplicationBootstrap {
   }
 
   private async processPredictHQEvent(extData: any, systemOrganizerId: string, city: string) {
-    // Deduplication check
     const existing = await this.eventRepository.findOne({
       where: { externalId: extData.id, source: EventSource.PREDICTHQ },
     });
     if (existing) return;
 
+    if (!extData.location || extData.location.length < 2) return;
+
     const rawCategory = extData.labels?.[0] || 'event';
     const eventType = this.mapPredictHQCategory(rawCategory);
-
-    // If PredictHQ didn't give us coordinates, skip – we can't guarantee location.
-    if (!extData.location || extData.location.length < 2) {
-      return;
-    }
-
-    const eventCoords: LatLng = {
-      // PredictHQ uses [lng, lat]
-      lat: extData.location[1],
-      lng: extData.location[0],
-    };
-
-    const center = this.cityCenters[city];
-    // If for some reason we don't know the city center, skip.
-    if (!center) {
-      return;
-    }
-
-    // Strict radius filter: only keep events within ~60km of the city center.
-    const distanceKm = this.getDistanceKm(center, eventCoords);
-    if (distanceKm > 60) {
-      return;
-    }
 
     let address = city;
     if (extData.entities && extData.entities.length > 0) {
       const venue = extData.entities.find((e: any) => e.type === 'venue');
-      if (venue) {
-        // Keep city as the cluster city (Nairobi / Cape Town / Johannesburg),
-        // but store the venue name separately in the address field so the app
-        // can display "Venue Name, City".
-        address = venue.name;
-      }
+      if (venue) address = venue.name;
     }
 
     const newEvent = this.eventRepository.create({
@@ -169,8 +252,8 @@ export class EventIngestionService implements OnApplicationBootstrap {
         address: address,
         city: city,
         country: extData.country,
-        latitude: extData.location ? extData.location[1] : 0,
-        longitude: extData.location ? extData.location[0] : 0,
+        latitude: extData.location[1],
+        longitude: extData.location[0],
       },
       organizerId: systemOrganizerId,
       images: [this.getCategoryImage(eventType)],
@@ -178,7 +261,6 @@ export class EventIngestionService implements OnApplicationBootstrap {
 
     try {
       await this.eventRepository.save(newEvent);
-      this.logger.log(`Imported: ${newEvent.title} [${eventType}]`);
     } catch (e) {
       this.logger.error(`Failed to save ${extData.title}`);
     }
@@ -186,17 +268,41 @@ export class EventIngestionService implements OnApplicationBootstrap {
 
   private mapPredictHQCategory(externalLabel: string): EventType {
     const label = externalLabel.toLowerCase();
-
     if (label.includes('fest')) return EventType.FESTIVAL;
     if (label.includes('concert') || label.includes('music')) return EventType.CONCERT;
-    if (label.includes('theatre') || label.includes('art') || label.includes('comedy'))
-      return EventType.ARTS_CULTURE;
-    if (label.includes('expo') || label.includes('conference') || label.includes('business'))
-      return EventType.BUSINESS;
+    if (label.includes('theatre') || label.includes('art')) return EventType.ARTS_CULTURE;
+    if (label.includes('expo') || label.includes('conference')) return EventType.BUSINESS;
     if (label.includes('sport')) return EventType.SPORTS;
-    if (label.includes('club') || label.includes('party')) return EventType.NIGHTLIFE;
+    return EventType.NIGHTLIFE;
+  }
 
-    return EventType.OTHER;
+  private buildImagesArray(raw: any): string[] {
+    const banner = raw.bannerUrl || raw.imageUrl;
+    const logo = raw.logoUrl;
+    if (banner && logo && banner !== logo) return [banner, logo];
+    if (banner) return [banner];
+    if (logo) return [logo];
+    return [];
+  }
+
+  private formatDescription(raw: string): string {
+    if (!raw || typeof raw !== 'string') return '';
+    let text = raw
+      .replace(/\s+/g, ' ')
+      .replace(/'{2,}/g, "'")
+      .replace(/\btme\b/gi, 'time')
+      .replace(/\s+([.,!?])/g, '$1')
+      .trim();
+    // Add paragraph breaks every 2–3 sentences for readability
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    if (sentences.length > 2) {
+      const grouped: string[] = [];
+      for (let i = 0; i < sentences.length; i += 2) {
+        grouped.push(sentences.slice(i, i + 2).join(' ').trim());
+      }
+      return grouped.filter(Boolean).join('\n\n');
+    }
+    return text;
   }
 
   private getCategoryImage(type: EventType): string {

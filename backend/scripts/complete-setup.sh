@@ -64,25 +64,44 @@ echo ""
 
 # Step 2: Run schema
 echo "📋 Step 2: Running schema..."
-SCHEMA_FILE="../database-schema.sql"
+SCHEMA_FILE="../database/database-schema.sql"
 if [ ! -f "$SCHEMA_FILE" ]; then
-    SCHEMA_FILE="database-schema.sql"
+    SCHEMA_FILE="database/database-schema.sql"
 fi
 
 if [ ! -f "$SCHEMA_FILE" ]; then
-    echo "   ❌ Schema file not found!"
+    echo "   ❌ Schema file not found! Expected: database/database-schema.sql"
     exit 1
 fi
 
 echo "   Executing: $SCHEMA_FILE"
-if psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -f "$SCHEMA_FILE" > /dev/null 2>&1; then
-    echo "   ✅ Schema executed successfully"
+psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -f "$SCHEMA_FILE" -v ON_ERROR_STOP=1
+
+# Step 3: Run migrations
+echo ""
+echo "📋 Step 3: Running migrations..."
+MIGRATIONS_DIR="../database/migrations"
+for f in "$MIGRATIONS_DIR"/*.sql; do
+    [ -f "$f" ] || continue
+    echo "   $(basename "$f")"
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -f "$f" -v ON_ERROR_STOP=1 || true
+done
+
+# Step 4: Seed system bot
+echo ""
+echo "📋 Step 4: Seeding system bot..."
+SEED_FILE="../database/scripts/seed-system-bot.sql"
+if [ -f "$SEED_FILE" ]; then
+    psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" -d "$DB_NAME" -f "$SEED_FILE" -v ON_ERROR_STOP=1
+    echo "   ✅ Seed applied"
 else
-    echo "   ⚠️  Schema execution completed (check for warnings)"
+    echo "   (seed-system-bot.sql not found, skipping)"
 fi
 
 echo ""
 echo "✅ Complete database setup finished!"
+echo ""
+echo "Add to .env: SYSTEM_ORGANIZER_ID=00000000-0000-0000-0000-000000000001"
 echo ""
 echo "📝 Next Steps:"
 echo "--------------"

@@ -1,14 +1,16 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event, EventStatus, EventSource } from './entities/event.entity';
 import { EventInteraction, EventInteractionType } from './entities/event-interaction.entity';
 import { BaseService } from '../../common/base/base.service';
-import { CreateEventDto, EventResponseDto } from './dto';
+import { CreateEventDto, EventResponseDto, UpdateEventDto } from './dto';
 import { EventQueryDto } from './dto/event-query.dto';
 
 @Injectable()
 export class EventsService extends BaseService<Event> {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     @InjectRepository(Event)
     protected readonly eventRepository: Repository<Event>,
@@ -140,6 +142,7 @@ export class EventsService extends BaseService<Event> {
       locationType: event.locationType,
       customLocation: event.customLocation,
       images: event.images,
+      ticketTypes: event.ticketTypes,
       videoUrl: event.videoUrl,
       ageRestriction: event.ageRestriction,
       dressCode: event.dressCode,
@@ -220,6 +223,12 @@ export class EventsService extends BaseService<Event> {
     if (query.organizerId) {
       qb.andWhere('event.organizer_id = :organizerId', { organizerId: query.organizerId });
     }
+    if (query.search && query.search.trim()) {
+      const searchPattern = `%${query.search.trim()}%`;
+      qb.andWhere('(event.title ILIKE :search OR event.description ILIKE :search)', {
+        search: searchPattern,
+      });
+    }
     if (query.category) {
       qb.andWhere('event.category = :category', { category: query.category });
     }
@@ -230,12 +239,15 @@ export class EventsService extends BaseService<Event> {
       qb.andWhere('event.is_featured = TRUE');
     }
 
-    // Limit discovery to our supported cities by default
+    // Limit discovery to supported cities; include events with venue (no custom_location) when no city filter
     const allowedCities = ['Nairobi', 'Johannesburg', 'Cape Town'];
     if (query.city) {
       qb.andWhere("(event.custom_location->>'city') ILIKE :city", { city: query.city });
     } else {
-      qb.andWhere("(event.custom_location->>'city') IN (:...allowedCities)", { allowedCities });
+      qb.andWhere(
+        "(event.custom_location IS NULL) OR ((event.custom_location->>'city') IN (:...allowedCities))",
+        { allowedCities },
+      );
     }
 
     qb.orderBy('event.start_date', 'ASC')
@@ -309,17 +321,110 @@ export class EventsService extends BaseService<Event> {
     return this.listEvents(enriched);
   }
 
+  /** System bot user UUID (from seed) - used for anonymous view tracking */
+  private static readonly SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+  /**
+   * Track a view interaction (used by public track-view endpoint).
+   * Uses system user for anonymous views; fails gracefully if table missing.
+   */
+  async trackInteraction(
+    eventId: string,
+    _type: 'view' | 'wishlist' | 'purchase' | 'share' | 'checkin',
+  ): Promise<void> {
+    await this.trackView(EventsService.SYSTEM_USER_ID, eventId);
+  }
+
+  /** List events owned by an organizer (for "my events"). */
+  async listEventsForUser(
+    organizerProfileId: string,
+    query?: EventQueryDto,
+  ): Promise<{
+    data: EventResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    return this.listEventsForOrganizer(organizerProfileId, query ?? ({} as EventQueryDto));
+  }
+
+  /** Update event; throws if user is not the organizer. */
+  async updateEvent(id: string, dto: UpdateEventDto, userId: string): Promise<EventResponseDto> {
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: ['organizer', 'venue'],
+    });
+    if (!event) throw new NotFoundException(`Event with ID ${id} not found`);
+    if ((event.organizer as any)?.userId !== userId) {
+      throw new BadRequestException('You do not have permission to update this event');
+    }
+    if (dto.startDate) event.startDate = new Date(dto.startDate);
+    if (dto.endDate) event.endDate = new Date(dto.endDate);
+    if (dto.title !== undefined) event.title = dto.title;
+    if (dto.description !== undefined) event.description = dto.description;
+    if (dto.eventType !== undefined) event.eventType = dto.eventType;
+    if (dto.category !== undefined) event.category = dto.category;
+    if (dto.locationType !== undefined) event.locationType = dto.locationType;
+    if (dto.customLocation !== undefined) event.customLocation = dto.customLocation;
+    if (dto.venueId !== undefined) event.venueId = dto.venueId;
+    if (dto.images !== undefined) event.images = dto.images;
+    if (dto.videoUrl !== undefined) event.videoUrl = dto.videoUrl;
+    if (dto.ageRestriction !== undefined) event.ageRestriction = dto.ageRestriction;
+    if (dto.dressCode !== undefined) event.dressCode = dto.dressCode;
+    if (dto.maxTicketsPerUser !== undefined) event.maxTicketsPerUser = dto.maxTicketsPerUser;
+    if (dto.tags !== undefined) event.tags = dto.tags;
+    if (dto.externalUrl !== undefined) event.externalUrl = dto.externalUrl;
+    const saved = await this.eventRepository.save(event);
+    return this.findEventById(saved.id);
+  }
+
+  /** Delete event; throws if user is not the organizer. */
+  async deleteEvent(id: string, userId: string): Promise<void> {
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: ['organizer'],
+    });
+    if (!event) throw new NotFoundException(`Event with ID ${id} not found`);
+    if ((event.organizer as any)?.userId !== userId) {
+      throw new BadRequestException('You do not have permission to delete this event');
+    }
+    await this.eventRepository.remove(event);
+  }
+
+  /** Update event status (publish/cancel); throws if user is not the organizer. */
+  async updateStatus(id: string, status: EventStatus, userId: string): Promise<EventResponseDto> {
+    const event = await this.eventRepository.findOne({
+      where: { id },
+      relations: ['organizer', 'venue'],
+    });
+    if (!event) throw new NotFoundException(`Event with ID ${id} not found`);
+    if ((event.organizer as any)?.userId !== userId) {
+      throw new BadRequestException('You do not have permission to update this event');
+    }
+    event.status = status;
+    if (status === EventStatus.PUBLISHED) event.publishDate = new Date();
+    const saved = await this.eventRepository.save(event);
+    return this.findEventById(saved.id);
+  }
+
   /**
    * Track a view interaction for a user and event.
-   * This is intentionally lightweight; errors are allowed to bubble so callers can decide how to handle them.
+   * Fails gracefully if event_interactions table is missing (e.g. migration not yet run).
    */
   async trackView(userId: string, eventId: string): Promise<void> {
-    const interaction = this.interactionRepository.create({
-      userId,
-      eventId,
-      interactionType: EventInteractionType.VIEW,
-      weight: 1,
-    });
-    await this.interactionRepository.save(interaction);
+    try {
+      const interaction = this.interactionRepository.create({
+        userId,
+        eventId,
+        interactionType: EventInteractionType.VIEW,
+        weight: 1,
+      });
+      await this.interactionRepository.save(interaction);
+    } catch (err: any) {
+      // Log but don't throw – table may not exist yet (run migration 004)
+      this.logger.warn(
+        `trackView failed (event_interactions table may be missing): ${err?.message}`,
+      );
+    }
   }
 }

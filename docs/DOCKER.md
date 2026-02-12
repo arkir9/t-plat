@@ -10,6 +10,8 @@ Ensure `backend/.env` exists (copy from `backend/.env.example` and set `JWT_SECR
 
 This starts Postgres, Redis, and the backend API. Backend health: `http://localhost:3000/api/health`
 
+**Database init:** On first run (empty Postgres volume), the schema, migrations, and system bot seed are applied automatically via `docker/postgres-init/01-init-db.sh`.
+
 Then start the mobile app:
 
 ```bash
@@ -23,6 +25,15 @@ cd mobile && ./start-expo.sh
 - `make down` – stop all services
 - `make logs` – backend logs
 - `make test` – run backend tests in Docker
+
+## Fresh database (reset)
+
+If you need a clean database (e.g. after schema changes):
+
+```bash
+docker compose down -v   # Remove containers and volumes
+docker compose up -d     # Fresh start; init scripts run on empty DB
+```
 
 ## Troubleshooting
 

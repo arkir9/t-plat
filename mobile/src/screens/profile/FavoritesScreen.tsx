@@ -52,9 +52,16 @@ export function FavoritesScreen() {
     }, [loadFavorites]),
   );
 
-  const formatPrice = (price?: number, currency?: string) => {
-    if (!price || price === 0) return 'Free';
-    return `${currency === 'USD' ? '$' : 'KES'} ${price?.toLocaleString()}`;
+  const getPriceDisplay = (event: Event): string | null => {
+    if (event.ticketTypes?.length) {
+      const min = Math.min(...event.ticketTypes.map((t: any) => Number(t.price)));
+      if (min > 0) return event.ticketTypes.length > 1 ? `From KES ${min.toLocaleString()}` : `KES ${min.toLocaleString()}`;
+    }
+    if (event.price != null && event.price > 0) {
+      const sym = event.currency === 'USD' ? '$' : 'KES';
+      return `${sym} ${event.price.toLocaleString()}`;
+    }
+    return null;
   };
 
   const getLocation = (event: Event) => {
@@ -63,7 +70,7 @@ export function FavoritesScreen() {
   };
 
   const imageUri = (event: Event) =>
-    (event as any).bannerImageUrl ?? (event as any).images?.[0] ?? event.image;
+    (event as any).bannerImageUrl ?? event.images?.[1] ?? event.images?.[0];
 
   if (loading && events.length === 0) {
     return (
@@ -130,7 +137,7 @@ export function FavoritesScreen() {
                   <MapPin size={14} color={COLORS.textSecondary} />
                   <Text style={styles.metaText} numberOfLines={1}>{getLocation(item)}</Text>
                 </View>
-                <Text style={styles.cardPrice}>{formatPrice(item.price, item.currency)}</Text>
+                {getPriceDisplay(item) != null && <Text style={styles.cardPrice}>{getPriceDisplay(item)}</Text>}
               </View>
             </TouchableOpacity>
           )}

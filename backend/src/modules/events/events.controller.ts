@@ -1,152 +1,144 @@
 import {
-  Body,
   Controller,
   Get,
   Post,
+  Body,
+  Patch,
   Param,
+  Delete,
   Query,
   UseGuards,
-  ForbiddenException,
-  HttpCode,
-  HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
+import { EventStatus } from './entities/event.entity';
 import { EventsService } from './events.service';
-import { CreateEventDto, EventQueryDto, EventResponseDto } from './dto';
+import { OrganizersService } from '../organizers/organizers.service';
+import { CreateEventDto } from './dto/create-event.dto';
+import { UpdateEventDto } from './dto/update-event.dto';
+import { EventQueryDto } from './dto/event-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { User } from '../users/entities/user.entity';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
-import { OrganizersService } from '../organizers/organizers.service';
+import { User } from '../users/entities/user.entity';
+import { ApiPaginatedResponse } from '../../common/decorators/api-paginated-response.decorator';
+import { EventResponseDto } from './dto/event-response.dto';
+import { EventIngestionService } from './services/event-ingestion.service';
 
-@ApiTags('Events')
 @Controller('events')
 export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
+    private readonly eventIngestionService: EventIngestionService,
     private readonly organizersService: OrganizersService,
   ) {}
 
-  // ---------------------------------------------------------------------------
-  // Public discovery endpoints used by the mobile app
-  // ---------------------------------------------------------------------------
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  async create(@Body() createEventDto: CreateEventDto, @CurrentUser() user: User) {
+    const profiles = await this.organizersService.findByUserId(user.id);
+    const org = profiles.find((p) => p.profileType === 'event_organizer');
+    if (!org) throw new BadRequestException('You need an organizer profile to create events');
+    return this.eventsService.createEvent(createEventDto, org.id);
+  }
 
   @Public()
   @Get()
-  @ApiOperation({ summary: 'List events (paginated)' })
-  @ApiResponse({ status: 200, type: [EventResponseDto] })
-  async getEvents(@Query() query: EventQueryDto) {
+  @ApiPaginatedResponse(EventResponseDto)
+  findAll(@Query() query: EventQueryDto) {
+    // Note: Uses listEvents for proper filtering; BaseService.findAll doesn't support EventQueryDto
     return this.eventsService.listEvents(query);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Get('recommended/me')
-  @ApiOperation({ summary: 'Get recommended events for the current user' })
-  async getRecommendedForMe(
-    @CurrentUser() user: User,
-    @Query('limit') limit?: string,
-  ): Promise<{ data: EventResponseDto[]; total: number; page: number; limit: number }> {
-    const limitNum = Number(limit) > 0 ? Number(limit) : 10;
-    return this.eventsService.getRecommendedForUser(user.id, limitNum);
   }
 
   @Public()
   @Get('featured')
-  @ApiOperation({ summary: 'Get featured events for home screen' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  async getFeatured(@Query('limit') limit?: string) {
-    const limitNum = Number(limit) > 0 ? Number(limit) : 5;
-    return this.eventsService.getFeaturedEvents(limitNum);
+  getFeatured(@Query() query: EventQueryDto) {
+    const limit = Math.min(Number(query.limit) || 10, 20);
+    return this.eventsService.getFeaturedEvents(limit);
+  }
+
+  @Get('recommended/me')
+  @UseGuards(JwtAuthGuard)
+  getRecommended(@CurrentUser() user: User, @Query('limit') limit?: number) {
+    return this.eventsService.getRecommendedForUser(user.id, limit);
   }
 
   @Public()
   @Get('nearby')
-  @ApiOperation({ summary: 'Get nearby events (simplified)' })
-  @ApiQuery({ name: 'latitude', required: false, type: String })
-  @ApiQuery({ name: 'longitude', required: false, type: String })
-  @ApiQuery({ name: 'radius', required: false, type: String })
-  async getNearby(@Query() query: EventQueryDto) {
+  getNearby(
+    @Query('latitude') lat: number,
+    @Query('longitude') lon: number,
+    @Query('radius') radius?: number,
+  ) {
+    const query: EventQueryDto = {
+      latitude: lat?.toString(),
+      longitude: lon?.toString(),
+      radius: (radius ?? 25)?.toString(),
+      limit: 50,
+    } as EventQueryDto;
     return this.eventsService.getNearbyEvents(query);
   }
 
+  // --- NEW: Manual Scrape Trigger ---
   @Public()
-  @Get(':id([0-9a-fA-F-]{36})')
-  @ApiOperation({ summary: 'Get event details by ID' })
-  @ApiResponse({ status: 200, type: EventResponseDto })
-  @ApiResponse({ status: 404, description: 'Event not found' })
-  async getEventById(@Param('id') id: string): Promise<EventResponseDto> {
+  @Get('trigger-scrape')
+  async triggerScrape() {
+    await this.eventIngestionService.handleCron();
+    return { message: 'Scrape triggered. Check server logs.' };
+  }
+  // ----------------------------------
+
+  @Get('my-events')
+  @UseGuards(JwtAuthGuard)
+  async getMyEvents(@CurrentUser() user: User) {
+    const profiles = await this.organizersService.findByUserId(user.id);
+    const org = profiles.find((p) => p.profileType === 'event_organizer');
+    if (!org) return { data: [], total: 0, page: 1, limit: 20 };
+    return this.eventsService.listEventsForUser(org.id);
+  }
+
+  @Public()
+  @Get(':id')
+  findOne(@Param('id') id: string) {
     return this.eventsService.findEventById(id);
   }
 
+  @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Post(':id([0-9a-fA-F-]{36})/track-view')
-  @ApiOperation({ summary: 'Track a view interaction for personalization' })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async trackView(@Param('id') id: string, @CurrentUser() user: User): Promise<void> {
-    await this.eventsService.trackView(user.id, id);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Organizer endpoints
-  // ---------------------------------------------------------------------------
-
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Get('my-events')
-  @ApiOperation({ summary: 'List events owned by the current organizer' })
-  async getMyEvents(
+  update(
+    @Param('id') id: string,
+    @Body() updateEventDto: UpdateEventDto,
     @CurrentUser() user: User,
-    @Query() query: EventQueryDto,
-  ): Promise<{ data: EventResponseDto[]; total: number; page: number; limit: number }> {
-    const profiles = await this.organizersService.findByUserId(user.id);
-    const organizerProfile =
-      profiles.find((p) => p.profileType === 'event_organizer') ?? profiles[0];
-    if (!organizerProfile) {
-      throw new ForbiddenException('User is not an organizer');
-    }
-
-    return this.eventsService.listEventsForOrganizer(organizerProfile.id, query);
+  ) {
+    return this.eventsService.updateEvent(id, updateEventDto, user.id);
   }
 
-  @Post()
+  @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a new event (Organizer only)' })
-  @ApiResponse({ status: 201, type: EventResponseDto })
-  async createEvent(
-    @Body() createDto: CreateEventDto,
-    @CurrentUser() user: User,
-  ): Promise<EventResponseDto> {
-    // For now, use the primary organizer profile for this user
-    const profiles = await this.organizersService.findByUserId(user.id);
-    const organizerProfile =
-      profiles.find((p) => p.profileType === 'event_organizer') ?? profiles[0];
-    if (!organizerProfile) {
-      throw new ForbiddenException('User is not an organizer');
-    }
-
-    return this.eventsService.createEvent(createDto, organizerProfile.id);
+  remove(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.eventsService.deleteEvent(id, user.id);
   }
 
-  // ---------------------------------------------------------------------------
-  // Claim endpoint for hybrid strategy
-  // ---------------------------------------------------------------------------
-
-  @Post(':id([0-9a-fA-F-]{36})/claim')
+  @Post(':id/claim')
   @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Claim an imported event (Organizer only)' })
-  @ApiResponse({ status: 200, description: 'Event claimed successfully.' })
-  async claimEvent(@Param('id') id: string, @CurrentUser() user: User) {
-    const profiles = await this.organizersService.findByUserId(user.id);
-    const organizerProfile =
-      profiles.find((p) => p.profileType === 'event_organizer') ?? profiles[0];
-    if (!organizerProfile) {
-      throw new ForbiddenException('User is not an organizer');
-    }
-    return this.eventsService.claimEvent(id, organizerProfile.id);
+  claim(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.eventsService.claimEvent(id, user.id);
+  }
+
+  @Public()
+  @Post(':id/track-view')
+  trackView(@Param('id') id: string) {
+    return this.eventsService.trackInteraction(id, 'view');
+  }
+
+  @Patch(':id/publish')
+  @UseGuards(JwtAuthGuard)
+  publish(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.eventsService.updateStatus(id, EventStatus.PUBLISHED, user.id);
+  }
+
+  @Patch(':id/cancel')
+  @UseGuards(JwtAuthGuard)
+  cancel(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.eventsService.updateStatus(id, EventStatus.CANCELLED, user.id);
   }
 }

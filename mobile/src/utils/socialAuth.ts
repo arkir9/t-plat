@@ -48,7 +48,7 @@ export async function signInWithGoogle(): Promise<SocialAuthResult> {
     return { success: false, error: 'Google Client ID not configured.' };
   }
   try {
-    const redirectUri = AuthSession.makeRedirectUri({ useProxy: false });
+    const redirectUri = AuthSession.makeRedirectUri();
     const request = await AuthSession.loadAsync(
       {
         clientId,

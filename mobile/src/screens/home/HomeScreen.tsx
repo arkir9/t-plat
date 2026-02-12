@@ -10,7 +10,6 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -41,16 +40,16 @@ const COLORS = {
 
 const SPACING = { s: 8, m: 16, l: 24, xl: 32 };
 
-// --- UPDATED CATEGORIES ---
-const CATEGORIES = [
-    'All', 
-    'Recommended', 
-    'Nightlife', 
-    'Concerts', 
-    'Festivals', 
-    'Arts', 
-    'Sports', 
-    'Business'
+const CATEGORIES: Array<{ label: string; eventType?: string }> = [
+  { label: 'All' },
+  { label: 'Nightlife', eventType: 'nightlife' },
+  { label: 'Concerts', eventType: 'concert' },
+  { label: 'Festivals', eventType: 'festival' },
+  { label: 'Arts', eventType: 'arts_culture' },
+  { label: 'Sports', eventType: 'sports' },
+  { label: 'Business', eventType: 'business' },
+  { label: 'Community', eventType: 'community' },
+  { label: 'Other', eventType: 'other' },
 ];
 
 const formatEventDate = (dateString: string) => {
@@ -62,21 +61,15 @@ const formatEventDate = (dateString: string) => {
   }
 };
 
-const formatPrice = (price?: number, currency?: string) => {
-  if (!price || price === 0) return 'Free';
-  const currencySymbol = currency === 'USD' ? '$' : 'KES';
-  return `${currencySymbol} ${price.toLocaleString()}`;
-};
-
 const getLocationString = (event: Event) => {
-  if (event.locationType === 'venue' && event.venueId) {
-    return 'Venue'; 
-  }
   if (event.customLocation) {
     const { address, city } = event.customLocation;
+    if (address && city && address.includes(city)) return address;
     if (address && city) return `${address}, ${city}`;
-    if (address) return address;
-    if (city) return city;
+    return address || city || 'Nairobi';
+  }
+  if (event.locationType === 'venue' && event.venue) {
+    return event.venue.name || event.venue.venueCity || 'Venue'; 
   }
   return 'Location TBD';
 };
@@ -93,13 +86,17 @@ const CategoryChip = ({ label, active, onPress }: { label: string; active: boole
 const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) => {
   const location = getLocationString(event);
   const formattedDate = formatEventDate(event.startDate);
-  // Support both price field or ticketTypes array
-  const price = event.ticketTypes?.[0]?.price 
-    ? `KES ${event.ticketTypes[0].price}` 
-    : formatPrice(event.price, event.currency);
+  
+  let priceDisplay: string | null = null;
+  if (event.ticketTypes && event.ticketTypes.length > 0) {
+    const minPrice = Math.min(...event.ticketTypes.map((t: any) => Number(t.price)));
+    if (minPrice > 0) priceDisplay = event.ticketTypes.length > 1 ? `From KES ${minPrice.toLocaleString()}` : `KES ${minPrice.toLocaleString()}`;
+  } else if (event.price != null && event.price > 0) {
+    priceDisplay = `KES ${event.price.toLocaleString()}`;
+  }
 
   const isOfficial = event.isClaimed || event.source === 'internal';
-  const imageUri = event.images?.[0];
+  const imageUri = event.images?.[1] ?? event.images?.[0];
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
@@ -130,7 +127,7 @@ const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) =>
         </View>
 
         <View style={styles.cardFooter}>
-          <Text style={styles.cardPrice}>{price}</Text>
+          {priceDisplay != null && <Text style={styles.cardPrice}>{priceDisplay}</Text>}
           {!isOfficial && <Text style={styles.sourceText}>via {event.source}</Text>}
         </View>
       </View>
@@ -140,7 +137,7 @@ const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) =>
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
-  const [activeCategory, setActiveCategory] = useState('All');
+  const [activeCategory, setActiveCategory] = useState<{ label: string; eventType?: string }>(CATEGORIES[0]);
   const [events, setEvents] = useState<Event[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -155,29 +152,9 @@ export function HomeScreen() {
       const featuredResponse = await eventsService.getFeaturedEvents({ limit: 5 }).catch(() => null);
       if (featuredResponse?.data) setFeaturedEvents(featuredResponse.data);
 
-      if (activeCategory === 'Recommended') {
-        const response = await eventsService.getRecommendedEvents(20).catch(() => null);
-        if (response?.data) setEvents(response.data);
-        return;
-      }
-
       const params: any = { page: 1, limit: 20, status: 'published' };
-
-      if (activeCategory !== 'All') {
-          let typeParam = activeCategory.toLowerCase();
-          
-          if (activeCategory === 'Arts') typeParam = 'arts_culture';
-          if (activeCategory === 'Concerts') typeParam = 'concert';
-          if (activeCategory === 'Festivals') typeParam = 'festival';
-          // Nightlife maps directly to 'nightlife', Sports to 'sports', etc.
-          
-          // Use the new EventType column for filtering
-          params.eventType = typeParam;
-      }
-
-      if (searchQuery.trim()) {
-        params.search = searchQuery.trim();
-      }
+      if (activeCategory.eventType) params.eventType = activeCategory.eventType;
+      if (searchQuery.trim()) params.search = searchQuery.trim();
 
       const response = await eventsService.getEvents(params).catch(() => null);
       if (response?.data) setEvents(response.data);
@@ -194,8 +171,6 @@ export function HomeScreen() {
   }, [loadEvents]);
 
   const handleSearch = (text: string) => {
-    // Just update the search query; the debounced effect is handled
-    // by the memoized `loadEvents` function and the useEffect above.
     setSearchQuery(text);
   };
 
@@ -218,9 +193,10 @@ export function HomeScreen() {
             placeholderTextColor={COLORS.textLight}
             value={searchQuery}
             onChangeText={handleSearch}
+            onSubmitEditing={() => loadEvents()}
           />
         </View>
-        <TouchableOpacity style={styles.filterButton}>
+        <TouchableOpacity style={styles.filterButton} onPress={() => loadEvents()}>
           <Filter size={20} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
@@ -229,9 +205,9 @@ export function HomeScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesList}>
           {CATEGORIES.map((cat) => (
             <CategoryChip
-              key={cat}
-              label={cat}
-              active={activeCategory === cat}
+              key={cat.label}
+              label={cat.label}
+              active={activeCategory.label === cat.label}
               onPress={() => setActiveCategory(cat)}
             />
           ))}
@@ -248,7 +224,7 @@ export function HomeScreen() {
                 style={styles.featuredCard}
                 onPress={() => navigation.navigate('EventDetail', { eventId: event.id, event })}
               >
-                <Image source={{ uri: event.images?.[0] || 'https://via.placeholder.com/200' }} style={styles.featuredImage} />
+                <Image source={{ uri: (event.images?.[1] ?? event.images?.[0]) || 'https://via.placeholder.com/200' }} style={styles.featuredImage} />
                 <View style={styles.featuredContent}>
                   <Text style={styles.featuredTitle} numberOfLines={1}>{event.title}</Text>
                 </View>
@@ -277,7 +253,7 @@ export function HomeScreen() {
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadEvents(true)} />}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No events found</Text>
+              <Text style={styles.emptyText}>No events found.</Text>
             </View>
           }
         />

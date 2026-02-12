@@ -41,12 +41,7 @@ export function CheckoutScreen({ navigation, route }: any) {
     setLoading(true);
     try {
       // Create order
-      const order = await ticketsService.purchaseTickets({
-        eventId,
-        items,
-        paymentMethod: 'mpesa',
-        phoneNumber,
-      });
+      const order = await ticketsService.purchaseTickets(eventId, items, 'mpesa', phoneNumber);
 
       // Process payment via M-Pesa STK Push
       await paymentsService.createMpesaPayment(order.id, phoneNumber);

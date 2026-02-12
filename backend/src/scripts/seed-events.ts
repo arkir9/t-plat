@@ -17,7 +17,12 @@ import * as bcrypt from 'bcrypt';
 
 import { User } from '../modules/users/entities/user.entity';
 import { OrganizerProfile } from '../modules/organizers/entities/organizer-profile.entity';
-import { Event, EventStatus, EventType, LocationType } from '../modules/events/entities/event.entity';
+import {
+  Event,
+  EventStatus,
+  EventType,
+  LocationType,
+} from '../modules/events/entities/event.entity';
 
 // Load backend .env (works from dist/scripts as well)
 config({ path: join(__dirname, '..', '..', '.env') });

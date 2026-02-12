@@ -75,6 +75,9 @@ export class EventResponseDto {
   images?: string[];
 
   @ApiPropertyOptional()
+  ticketTypes?: Array<{ name?: string; price: number; currency?: string }>;
+
+  @ApiPropertyOptional()
   videoUrl?: string;
 
   @ApiPropertyOptional()

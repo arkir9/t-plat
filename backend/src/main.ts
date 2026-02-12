@@ -1,3 +1,10 @@
+import { config } from 'dotenv';
+import { join } from 'path';
+
+// Ensure .env is loaded before any module (helps when cwd differs)
+config({ path: join(__dirname, '..', '.env') });
+config({ path: join(process.cwd(), '.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';

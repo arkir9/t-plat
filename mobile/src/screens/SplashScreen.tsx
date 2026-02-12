@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 
 export const SplashScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const logoOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -15,7 +17,7 @@ export const SplashScreen: React.FC = () => {
     }).start(() => {
       // Navigate to Onboarding after animation
       setTimeout(() => {
-        navigation.replace('Onboarding' as never);
+        navigation.replace('Onboarding', undefined);
       }, 1500);
     });
   }, []);

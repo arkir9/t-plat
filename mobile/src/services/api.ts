@@ -121,7 +121,7 @@ class ApiService {
           originalRequest._retry = true;
 
           try {
-            const { refreshToken, logout } = useAuthStore.getState();
+            const { refreshToken } = useAuthStore.getState();
             if (refreshToken) {
               const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
                 refreshToken,
@@ -136,7 +136,18 @@ class ApiService {
               }
             }
           } catch (refreshError) {
-            logout();
+            // Gracefully clear auth state on refresh failure
+            const store = useAuthStore.getState();
+            if (typeof store.logout === 'function') {
+              store.logout();
+            } else {
+              useAuthStore.setState({
+                user: null,
+                accessToken: null,
+                refreshToken: null,
+                isAuthenticated: false,
+              } as any);
+            }
             return Promise.reject(refreshError);
           }
         }

@@ -173,7 +173,7 @@ export function SafetyCenterScreen({ navigation, route }: any) {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Submit',
-          onPress: async (description) => {
+          onPress: async (description?: string) => {
             if (!description || !description.trim()) {
               Alert.alert('Error', 'Please provide a description');
               return;

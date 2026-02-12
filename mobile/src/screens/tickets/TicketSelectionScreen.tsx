@@ -42,7 +42,7 @@ export function TicketSelectionScreen({ navigation, route }: any) {
 
       // Initialize quantities
       const initialQuantities: Record<string, number> = {};
-      ticketTypesData.forEach((tt) => {
+      (Array.isArray(ticketTypesData) ? ticketTypesData : []).forEach((tt: TicketType) => {
         initialQuantities[tt.id] = 0;
       });
       setQuantities(initialQuantities);

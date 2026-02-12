@@ -43,6 +43,7 @@ export enum EventType {
 // Source tracking for Hybrid Strategy
 export enum EventSource {
   INTERNAL = 'internal',
+  SCRAPED = 'scraped', // Hustlesasa single-page & product-grid stores
   PREDICTHQ = 'predicthq',
   TICKETMASTER = 'ticketmaster',
 }
@@ -234,7 +235,7 @@ export class Event {
     notes?: string;
   };
 
-  @Column({ type: 'jsonb', nullable: true })
+  @Column({ name: 'ticket_types', type: 'jsonb', nullable: true })
   ticketTypes?: any[]; // Storing basic ticket info for list view optimization
 
   @CreateDateColumn({ name: 'created_at' })

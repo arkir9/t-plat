@@ -42,6 +42,8 @@ import { HealthModule } from './health/health.module';
       envFilePath: [
         join(process.cwd(), '.env.local'),
         join(process.cwd(), '.env'),
+        join(__dirname, '..', '.env.local'),
+        join(__dirname, '..', '.env'),
         join(__dirname, '..', '..', '.env.local'),
         join(__dirname, '..', '..', '.env'),
       ],

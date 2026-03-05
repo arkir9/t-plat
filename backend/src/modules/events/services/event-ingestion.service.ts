@@ -5,77 +5,122 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import { Event, EventSource, EventStatus, LocationType, EventType } from '../entities/event.entity';
-import { HustlesasaScraperService } from './hustlesasa-scraper.service';
+import { UniversalScraperService } from './universal-scraper.service';
+import { TicketsasaScraperService } from './ticketsasa-scraper.service';
 
 @Injectable()
 export class EventIngestionService implements OnApplicationBootstrap {
   private readonly logger = new Logger(EventIngestionService.name);
+
+  private readonly TARGET_DOMAINS = [
+    'hustlesasa.shop',
+    'mookh.com',
+    'ticketsasa.com',
+    'kenyabuzz.com',
+    'mtickets.com',
+    'madfun.com',
+  ];
 
   constructor(
     @InjectRepository(Event)
     private eventRepository: Repository<Event>,
     private httpService: HttpService,
     private configService: ConfigService,
-    private hustlesasaScraper: HustlesasaScraperService,
+    private universalScraper: UniversalScraperService,
+    private ticketsasaScraper: TicketsasaScraperService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    // Run ingestion in background so DB/table issues don't block server startup
-    this.handleCron().catch((err) => {
-      this.logger.warn('Event ingestion failed (server still running):', err?.message || err);
-    });
+    this.logger.log(
+      'EventIngestionService ready. Use POST /events/dev/trigger-scraper or wait for cron.',
+    );
   }
 
   async handleCron() {
-    this.logger.log('Starting Hybrid Event Ingestion...');
+    this.logger.log('Starting Hybrid Event Ingestion (Ticketsasa pilot first)...');
 
-    // 1. PredictHQ (Global Events)
-    await this.fetchGeneralDiscovery('Nairobi', '-1.2921,36.8219');
+    // Section 9: one source, full pipeline, then scale.
+    // 1. Run Ticketsasa single-source pilot (hash-based, AI-powered scrape)
+    await this.ticketsasaScraper.runSingleSourcePilot();
 
-    // 2. Hustlesasa Auto-Discovery (Powered by SerpApi)
-    await this.runHustlesasaDiscovery('Nairobi');
+    // 2. Universal AI-Powered Discovery (multi-domain) – can be toggled on/off as we scale.
+    await this.runUniversalDiscovery('Nairobi');
   }
 
   /**
-   * 🔎 DISCOVERY ENGINE (SerpApi)
+   * 🎨 VISUAL HUNTER (SerpApi Image Search)
+   * Finds the actual flyer/poster for an event title via Google Images.
    */
-  private async runHustlesasaDiscovery(city: string) {
+  private async fetchRealPoster(query: string): Promise<string | null> {
     const apiKey = this.configService.get('SERPAPI_KEY');
-
-    if (!apiKey) {
-      this.logger.warn('Skipping Hustlesasa Discovery: SERPAPI_KEY missing in .env');
-      return;
-    }
-
-    this.logger.log(`🔍 [SerpApi] Searching for new Hustlesasa stores in ${city}...`);
-    const stores = await this.discoverHustlesasaStores(city, apiKey);
-
-    if (stores.length === 0) {
-      this.logger.log('No new stores found via discovery.');
-      return;
-    }
-
-    this.logger.log(`✅ Found ${stores.length} unique stores. Starting scrape...`);
-
-    // Scrape Each Found Store
-    for (const storeUrl of stores) {
-      await this.ingestHustlesasaEvents(storeUrl);
-    }
-  }
-
-  private async discoverHustlesasaStores(city: string, apiKey: string): Promise<string[]> {
-    // Find sites ending in .hustlesasa.shop that mention the city
-    const query = `site:hustlesasa.shop "${city}"`;
-    const url = 'https://serpapi.com/search.json';
+    if (!apiKey) return null;
 
     try {
       const { data } = await firstValueFrom(
-        this.httpService.get(url, {
+        this.httpService.get('https://serpapi.com/search.json', {
+          params: {
+            engine: 'google_images',
+            q: query,
+            api_key: apiKey,
+            num: 1, // We only need the top result
+            gl: 'ke', // Localize to Kenya
+          },
+        }),
+      );
+
+      if (data.images_results && data.images_results.length > 0) {
+        return data.images_results[0].original; // Return HD image
+      }
+    } catch (error) {
+      // Fail silently and fall back to generic image
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * UNIVERSAL DISCOVERY ENGINE (SerpApi + AI Scraper)
+   * Searches multiple Kenyan ticketing domains and extracts events via LLM.
+   */
+  private async runUniversalDiscovery(city: string) {
+    const apiKey = this.configService.get('SERPAPI_KEY');
+
+    if (!apiKey) {
+      this.logger.warn('Skipping Universal Discovery: SERPAPI_KEY missing in .env');
+      return;
+    }
+
+    this.logger.log(
+      `[Universal Discovery] Searching ${this.TARGET_DOMAINS.length} domains for "${city}" events...`,
+    );
+
+    const discoveredUrls = new Set<string>();
+
+    for (const domain of this.TARGET_DOMAINS) {
+      const urls = await this.discoverEventUrls(domain, city, apiKey);
+      urls.forEach((u) => discoveredUrls.add(u));
+      await this.delay(500);
+    }
+
+    this.logger.log(`Found ${discoveredUrls.size} unique event URLs. Starting AI scrape...`);
+
+    for (const url of discoveredUrls) {
+      await this.ingestFromUrl(url);
+      await this.delay(1500);
+    }
+  }
+
+  private async discoverEventUrls(domain: string, city: string, apiKey: string): Promise<string[]> {
+    const query = `site:${domain} ("ticket" OR "event" OR "party") "${city}"`;
+
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get('https://serpapi.com/search.json', {
           params: {
             engine: 'google',
             q: query,
             api_key: apiKey,
-            num: 20,
+            num: 15,
             google_domain: 'google.co.ke',
             gl: 'ke',
             hl: 'en',
@@ -85,96 +130,82 @@ export class EventIngestionService implements OnApplicationBootstrap {
 
       if (!data.organic_results) return [];
 
-      const uniqueStores = new Set<string>();
-
-      data.organic_results.forEach((item: any) => {
-        try {
-          const itemUrl = new URL(item.link);
-          const rootStore = `${itemUrl.protocol}//${itemUrl.hostname}`;
-
-          // Filter out main marketing site
-          if (!rootStore.includes('www.hustlesasa.com')) {
-            uniqueStores.add(rootStore);
+      return data.organic_results
+        .map((item: any) => item.link as string)
+        .filter((link: string) => {
+          try {
+            const parsed = new URL(link);
+            const isRootPage = parsed.pathname === '/' || parsed.pathname === '';
+            return !isRootPage;
+          } catch {
+            return false;
           }
-        } catch (e) {
-          // Ignore invalid URLs
-        }
-      });
-
-      return Array.from(uniqueStores);
+        });
     } catch (error: any) {
-      this.logger.error('SerpApi Discovery failed', error.response?.data?.error || error.message);
+      this.logger.error(
+        `SerpApi search failed for ${domain}: ${error.response?.data?.error || error.message}`,
+      );
       return [];
     }
   }
 
-  // --- HUSTLESASA INGESTION ---
-  private async ingestHustlesasaEvents(storeUrl: string) {
-    const scrapedEvents = await this.hustlesasaScraper.scrapeStore(storeUrl);
+  private async ingestFromUrl(url: string) {
+    const existing = await this.eventRepository.findOne({
+      where: { externalUrl: url },
+    });
+    if (existing) return;
+
+    const scrapedEvents = await this.universalScraper.scrapeUrl(url);
     const systemOrganizerId = this.configService.get('SYSTEM_ORGANIZER_ID');
 
     if (scrapedEvents.length > 0) {
-      this.logger.log(`📍 Processing ${scrapedEvents.length} events from ${storeUrl}`);
+      this.logger.log(`Processing ${scrapedEvents.length} AI-extracted events from ${url}`);
     }
 
     for (const raw of scrapedEvents) {
-      const existing = await this.eventRepository.findOne({
-        where: { externalUrl: raw.externalUrl },
+      const ticketTypes =
+        raw.priceKES > 0
+          ? [
+              {
+                name: 'General Admission',
+                price: raw.priceKES,
+                currency: 'KES',
+                totalQuantity: 100,
+              },
+            ]
+          : [];
+
+      const images = raw.imageUrl ? [raw.imageUrl] : [];
+
+      const newEvent = this.eventRepository.create({
+        title: raw.title,
+        description: raw.description,
+        eventType: raw.eventType,
+        startDate: raw.startDate,
+        endDate: raw.endDate,
+        source: EventSource.SCRAPED,
+        externalUrl: raw.externalUrl,
+        isClaimed: false,
+        ticketTypes: ticketTypes.length ? ticketTypes : undefined,
+        images,
+        bannerImageUrl: images[0] || null,
+        status: EventStatus.PUBLISHED,
+        locationType: LocationType.CUSTOM,
+        customLocation: {
+          address: 'Nairobi',
+          city: 'Nairobi',
+          country: 'Kenya',
+          latitude: -1.2921,
+          longitude: 36.8219,
+        },
+        organizerId: systemOrganizerId,
       });
 
-      const description =
-        typeof raw.description === 'string'
-          ? this.formatDescription(raw.description)
-          : raw.description || '';
-      const ticketTypes =
-        raw.price > 0
-          ? [{ name: 'General Admission', price: raw.price, currency: 'KES' }]
-          : undefined;
-      const images = this.buildImagesArray(raw);
-
-      if (!existing) {
-        const newEvent = this.eventRepository.create({
-          title: raw.title,
-          description,
-          eventType: raw.eventType,
-          startDate: raw.startDate,
-          endDate: raw.endDate,
-          source: EventSource.SCRAPED,
-          externalUrl: raw.externalUrl,
-          isClaimed: false,
-          ticketTypes,
-          images,
-          status: EventStatus.PUBLISHED,
-          locationType: LocationType.CUSTOM,
-          customLocation: {
-            address: 'Nairobi',
-            city: 'Nairobi',
-            country: 'Kenya',
-            latitude: -1.2921,
-            longitude: 36.8219,
-          },
-          organizerId: systemOrganizerId,
-        });
-
-        try {
-          await this.eventRepository.save(newEvent);
-          this.logger.log(`   + Saved: ${newEvent.title}`);
-        } catch (e: any) {
-          this.logger.error(`   - Failed: ${raw.title}`);
-        }
-      } else if (
-        (!existing.images || existing.images.length === 0) &&
-        images.length > 0
-      ) {
-        try {
-          existing.images = images;
-          if (ticketTypes) existing.ticketTypes = ticketTypes;
-          existing.description = description;
-          await this.eventRepository.save(existing);
-          this.logger.log(`   ↻ Updated images/price: ${existing.title}`);
-        } catch (e: any) {
-          this.logger.warn(`   - Update failed: ${raw.title}`);
-        }
+      try {
+        await this.eventRepository.save(newEvent);
+        this.logger.log(`   + Saved [${raw.sourceDomain}]: ${newEvent.title}`);
+      } catch (e: any) {
+        this.logger.error(`   - Failed [${raw.sourceDomain}]: ${raw.title}`);
       }
     }
   }
@@ -187,9 +218,9 @@ export class EventIngestionService implements OnApplicationBootstrap {
     const url = 'https://api.predicthq.com/v1/events/';
     const params = {
       within: `50km@${latLong}`,
-      category: 'concerts,festivals,performing-arts,expos',
+      category: 'concerts,festivals,performing-arts,expos,sports',
       sort: 'rank',
-      limit: 20,
+      limit: 10, // Limit API usage
       'active.gte': new Date().toISOString().split('T')[0],
     };
 
@@ -212,15 +243,28 @@ export class EventIngestionService implements OnApplicationBootstrap {
         }),
       );
       const events = data.results || [];
-      for (const item of events) {
-        await this.processPredictHQEvent(item, systemOrganizerId, cityName);
+
+      for (const [index, item] of events.entries()) {
+        await this.processPredictHQEvent(item, systemOrganizerId, cityName, index);
       }
     } catch (error: any) {
-      this.logger.error(`Error fetching ${sourceLabel}`, error.message);
+      const status = error?.response?.status;
+      if (status === 402) {
+        this.logger.warn(
+          `[${sourceLabel}] PredictHQ returned 402 (Payment Required) — free tier likely exhausted. Skipping.`,
+        );
+      } else {
+        this.logger.error(`Error fetching ${sourceLabel}: ${error.message}`);
+      }
     }
   }
 
-  private async processPredictHQEvent(extData: any, systemOrganizerId: string, city: string) {
+  private async processPredictHQEvent(
+    extData: any,
+    systemOrganizerId: string,
+    city: string,
+    index: number,
+  ) {
     const existing = await this.eventRepository.findOne({
       where: { externalId: extData.id, source: EventSource.PREDICTHQ },
     });
@@ -235,6 +279,20 @@ export class EventIngestionService implements OnApplicationBootstrap {
     if (extData.entities && extData.entities.length > 0) {
       const venue = extData.entities.find((e: any) => e.type === 'venue');
       if (venue) address = venue.name;
+    }
+
+    // --- VISUAL HUNTER LOGIC ---
+    // 1. Default to category image
+    let posterImage = this.getCategoryImage(eventType);
+
+    // 2. If it's a top event (first 5), try to find the REAL poster
+    if (index < 5) {
+      const visualQuery = `${extData.title} ${address || city} event poster`;
+      const realPoster = await this.fetchRealPoster(visualQuery);
+      if (realPoster) {
+        posterImage = realPoster;
+        this.logger.log(`Visual Hunter: Found real poster for ${extData.title}`);
+      }
     }
 
     const newEvent = this.eventRepository.create({
@@ -256,7 +314,8 @@ export class EventIngestionService implements OnApplicationBootstrap {
         longitude: extData.location[0],
       },
       organizerId: systemOrganizerId,
-      images: [this.getCategoryImage(eventType)],
+      bannerImageUrl: posterImage,
+      images: [posterImage],
     });
 
     try {
@@ -276,35 +335,6 @@ export class EventIngestionService implements OnApplicationBootstrap {
     return EventType.NIGHTLIFE;
   }
 
-  private buildImagesArray(raw: any): string[] {
-    const banner = raw.bannerUrl || raw.imageUrl;
-    const logo = raw.logoUrl;
-    if (banner && logo && banner !== logo) return [banner, logo];
-    if (banner) return [banner];
-    if (logo) return [logo];
-    return [];
-  }
-
-  private formatDescription(raw: string): string {
-    if (!raw || typeof raw !== 'string') return '';
-    let text = raw
-      .replace(/\s+/g, ' ')
-      .replace(/'{2,}/g, "'")
-      .replace(/\btme\b/gi, 'time')
-      .replace(/\s+([.,!?])/g, '$1')
-      .trim();
-    // Add paragraph breaks every 2–3 sentences for readability
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    if (sentences.length > 2) {
-      const grouped: string[] = [];
-      for (let i = 0; i < sentences.length; i += 2) {
-        grouped.push(sentences.slice(i, i + 2).join(' ').trim());
-      }
-      return grouped.filter(Boolean).join('\n\n');
-    }
-    return text;
-  }
-
   private getCategoryImage(type: EventType): string {
     const images: Record<string, string> = {
       [EventType.CONCERT]:
@@ -320,5 +350,9 @@ export class EventIngestionService implements OnApplicationBootstrap {
       [EventType.OTHER]: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=800&q=80',
     };
     return images[type] || images[EventType.OTHER];
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

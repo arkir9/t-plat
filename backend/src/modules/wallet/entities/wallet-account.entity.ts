@@ -7,8 +7,7 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
-import { WalletTransaction } from './wallet-transaction.entity';
+import type { WalletTransaction } from './wallet-transaction.entity';
 
 export enum WalletCurrency {
   KES = 'KES',

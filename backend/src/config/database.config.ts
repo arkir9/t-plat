@@ -6,6 +6,7 @@ import { join } from 'path';
 // Import all entities so TypeORM knows every table (required for DB connection and storage)
 import { User } from '../modules/users/entities/user.entity';
 import { OrganizerProfile } from '../modules/organizers/entities/organizer-profile.entity';
+import { OrganizerApplication } from '../modules/organizers/entities/organizer-application.entity';
 import { RefreshToken } from '../modules/auth/entities/refresh-token.entity';
 import { Event } from '../modules/events/entities/event.entity';
 import { EventInteraction } from '../modules/events/entities/event-interaction.entity';
@@ -26,6 +27,7 @@ import { TicketTransfer } from '../modules/tickets/entities/ticket-transfer.enti
 export const entities = [
   User,
   OrganizerProfile,
+  OrganizerApplication,
   RefreshToken,
   Event,
   EventInteraction,
@@ -62,7 +64,7 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
     entities: entities,
     migrations: [join(__dirname, '../migrations/*{.ts,.js}')],
     synchronize: process.env.DB_SYNCHRONIZE === 'true' || false,
-    logging: process.env.DB_LOGGING === 'true' || true,
+    logging: process.env.DB_LOGGING === 'true',
 
     // Connection Pool Settings for Scalability
     extra: {

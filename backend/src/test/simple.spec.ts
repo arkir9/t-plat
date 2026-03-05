@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcrypt';
 import { User } from '../modules/users/entities/user.entity';
-import { Event, EventStatus, LocationType } from '../modules/events/entities/event.entity';
+import { Event, EventStatus, EventType, LocationType } from '../modules/events/entities/event.entity';
 import { OrganizerProfile } from '../modules/organizers/entities/organizer-profile.entity';
 import { getDatabaseConfig } from '../config/database.config';
 
@@ -46,7 +46,7 @@ describe('Simple Functional Tests', () => {
       event.title = 'Test Event';
       event.description = 'A test event description';
       event.organizerId = '123';
-      event.eventType = 'party';
+      event.eventType = EventType.NIGHTLIFE;
       event.category = 'nightlife';
       event.startDate = new Date('2024-02-01T20:00:00Z');
       event.endDate = new Date('2024-02-02T02:00:00Z');
@@ -66,7 +66,7 @@ describe('Simple Functional Tests', () => {
       expect(event.title).toBe('Test Event');
       expect(event.description).toBe('A test event description');
       expect(event.organizerId).toBe('123');
-      expect(event.eventType).toBe('party');
+      expect(event.eventType).toBe('nightlife');
       expect(event.category).toBe('nightlife');
       expect(event.startDate).toEqual(new Date('2024-02-01T20:00:00Z'));
       expect(event.endDate).toEqual(new Date('2024-02-02T02:00:00Z'));

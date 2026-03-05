@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
-import * as QRCode from 'qrcode';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { TicketType, Currency } from './entities/ticket-type.entity';
 import { Order, PaymentStatus, PaymentMethod } from './entities/order.entity';
@@ -50,6 +50,7 @@ export class TicketsService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private dataSource: DataSource,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -118,30 +119,41 @@ export class TicketsService {
   }
 
   /**
-   * Generate QR code for a ticket
+   * Generate a cryptographically signed QR payload.
+   * The payload encodes ticket_id + event_id + an HMAC signature so that
+   * the check-in endpoint can verify authenticity without a DB round-trip
+   * for the hash itself.
    */
-  private async generateQRCode(ticketId: string, eventId: string, userId: string): Promise<string> {
-    const qrData = JSON.stringify({
-      ticketId,
-      eventId,
-      userId,
-      timestamp: Date.now(),
-    });
+  private generateQRPayload(ticketId: string, eventId: string): {
+    qrCode: string;
+    qrCodeHash: string;
+  } {
+    const secret =
+      this.configService.get<string>('QR_HMAC_SECRET') || 'tplat-qr-default-secret';
+    const message = `${ticketId}:${eventId}`;
+    const hmac = crypto
+      .createHmac('sha256', secret)
+      .update(message)
+      .digest('hex');
 
-    // Generate QR code as data URL
-    try {
-      return await QRCode.toDataURL(qrData);
-    } catch (error) {
-      // Fallback: return the data as string if QR generation fails
-      return qrData;
-    }
+    const qrCode = JSON.stringify({ t: ticketId, e: eventId, sig: hmac });
+    return { qrCode, qrCodeHash: hmac };
   }
 
   /**
-   * Generate QR code hash for verification
+   * Verify a QR payload signature (used at check-in).
    */
-  private generateQRCodeHash(qrCode: string): string {
-    return crypto.createHash('sha256').update(qrCode).digest('hex');
+  verifyQRPayload(ticketId: string, eventId: string, signature: string): boolean {
+    const secret =
+      this.configService.get<string>('QR_HMAC_SECRET') || 'tplat-qr-default-secret';
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(`${ticketId}:${eventId}`)
+      .digest('hex');
+    return crypto.timingSafeEqual(
+      Buffer.from(expected, 'hex'),
+      Buffer.from(signature, 'hex'),
+    );
   }
 
   /**
@@ -171,8 +183,8 @@ export class TicketsService {
     const venueFee = venueFeePercentage
       ? (subtotal * venueFeePercentage) / 100
       : venueFeeFixed || 0;
-    const total = subtotal;
-    const netAmount = subtotal - platformCommission - venueFee;
+    const total = subtotal + platformCommission;
+    const netAmount = subtotal - venueFee;
 
     return {
       subtotal,
@@ -294,13 +306,12 @@ export class TicketsService {
         ticketType.quantitySold += item.quantity;
         await queryRunner.manager.save(TicketType, ticketType);
 
-        // Create individual tickets
         for (let i = 0; i < item.quantity; i++) {
           const tempTicketId = crypto.randomUUID();
-          const qrCode = await this.generateQRCode(tempTicketId, eventId, userId);
-          const qrCodeHash = this.generateQRCodeHash(qrCode);
+          const { qrCode, qrCodeHash } = this.generateQRPayload(tempTicketId, eventId);
 
           const ticket = queryRunner.manager.create(Ticket, {
+            id: tempTicketId,
             userId,
             eventId,
             ticketTypeId: ticketType.id,
@@ -360,6 +371,72 @@ export class TicketsService {
     }
 
     return ticket;
+  }
+
+  /**
+   * Check in a ticket at the door by verifying the scanned QR payload.
+   * Only the organizer who owns the event may perform check-in.
+   */
+  async checkIn(
+    qrCodeRaw: string,
+    organizerUserId: string,
+  ): Promise<{ success: boolean; ticket: Ticket; message: string }> {
+    let parsed: { t?: string; e?: string; sig?: string };
+    try {
+      parsed = JSON.parse(qrCodeRaw);
+    } catch {
+      throw new BadRequestException('Invalid QR code format');
+    }
+
+    const { t: ticketId, e: eventId, sig: signature } = parsed;
+    if (!ticketId || !eventId || !signature) {
+      throw new BadRequestException('Incomplete QR code data');
+    }
+
+    if (!this.verifyQRPayload(ticketId, eventId, signature)) {
+      throw new BadRequestException('QR code signature is invalid — possible forgery');
+    }
+
+    const ticket = await this.ticketRepository.findOne({
+      where: { id: ticketId },
+      relations: ['event', 'event.organizer', 'ticketType'],
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    if (ticket.eventId !== eventId) {
+      throw new BadRequestException('QR code event mismatch');
+    }
+
+    const organizer = ticket.event?.organizer;
+    if (!organizer || organizer.userId !== organizerUserId) {
+      throw new ForbiddenException(
+        'You are not the organizer of this event',
+      );
+    }
+
+    if (ticket.status === TicketStatus.USED) {
+      throw new BadRequestException('Ticket already scanned');
+    }
+
+    if (ticket.status !== TicketStatus.ACTIVE) {
+      throw new BadRequestException(
+        `Ticket cannot be checked in — status is "${ticket.status}"`,
+      );
+    }
+
+    ticket.status = TicketStatus.USED;
+    ticket.checkedInAt = new Date();
+    ticket.checkedInById = organizer.id;
+    await this.ticketRepository.save(ticket);
+
+    return {
+      success: true,
+      ticket,
+      message: 'Check-in successful',
+    };
   }
 
   /**

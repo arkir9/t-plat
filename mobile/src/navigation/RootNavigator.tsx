@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { NavigatorScreenParams } from '@react-navigation/native';
-import { useAuthStore } from '../store/authStore';
+
+import { useAuthStore, useHydrationStore } from '../store/authStore';
+import { SplashScreen } from '../screens/SplashScreen';
 
 // Screens
 import { WelcomeScreen } from '../screens/auth/WelcomeScreen';
@@ -14,6 +15,7 @@ import { EventDetailScreen } from '../screens/events/EventDetailScreen';
 import { TicketSelectionScreen } from '../screens/tickets/TicketSelectionScreen';
 import { CheckoutScreen } from '../screens/tickets/CheckoutScreen';
 import { SuccessScreen } from '../screens/tickets/SuccessScreen';
+import { TicketDetailScreen } from '../screens/tickets/TicketDetailScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { SettingsScreen } from '../screens/profile/SettingsScreen';
 import { FavoritesScreen } from '../screens/profile/FavoritesScreen';
@@ -25,7 +27,10 @@ import { PlatProScreen } from '../screens/profile/PlatProScreen';
 import { PlatProDashboardScreen } from '../screens/profile/PlatProDashboardScreen';
 import { PlatProEventsScreen } from '../screens/profile/PlatProEventsScreen';
 import { PlatProCreateEventScreen } from '../screens/profile/PlatProCreateEventScreen';
-import { WalletScreen } from '../screens/profile/WalletScreen'; // <--- NEW IMPORT
+import { WalletScreen } from '../screens/profile/WalletScreen';
+import { PlatProApplyScreen } from '../screens/profile/PlatProApplyScreen';
+import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
+import { CheckInScannerScreen } from '../screens/profile/CheckInScannerScreen';
 
 export type RootStackParamList = {
   Welcome: undefined;
@@ -36,8 +41,20 @@ export type RootStackParamList = {
   MainTabs: undefined;
   EventDetail: { eventId: string; event?: any };
   TicketSelection: { eventId: string; event?: any };
-  Checkout: { eventId: string; ticketTypes: any; total: number; eventTitle: string };
-  Success: { orderId: string; totalAmount: number; eventTitle: string };
+  Checkout: {
+    eventId: string;
+    event?: any;
+    items: Array<{
+      ticketTypeId: string;
+      ticketTypeName: string;
+      quantity: number;
+      unitPrice: number;
+      currency: string;
+    }>;
+    subtotal: number;
+  };
+  Success: { orderId: string; order?: any; eventTitle?: string };
+  TicketDetail: { ticketId: string; ticket?: any };
   Profile: undefined;
   Settings: undefined;
   Favorites: undefined;
@@ -46,19 +63,33 @@ export type RootStackParamList = {
   PlatPro: undefined;
   PlatProDashboard: undefined;
   PlatProEvents: undefined;
-  PlatProCreateEvent: { eventId?: string }; // Optional ID for editing
-  Wallet: undefined; // <--- NEW ROUTE
+  PlatProCreateEvent: { eventId?: string };
+  PlatProApply: undefined;
+  AdminDashboard: undefined;
+  CheckInScanner: undefined;
+  Wallet: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const RootNavigator = () => {
   const { isAuthenticated, isOnboarded, checkAuth } = useAuthStore();
+  const authHydrated = useHydrationStore((s) => s.authHydrated);
   const hasOnboarded = isOnboarded ?? true;
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     checkAuth?.();
   }, [checkAuth]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashDone(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!authHydrated || !splashDone) {
+    return <SplashScreen />;
+  }
 
   return (
     <Stack.Navigator
@@ -88,6 +119,7 @@ export const RootNavigator = () => {
           <Stack.Screen name="TicketSelection" component={TicketSelectionScreen} />
           <Stack.Screen name="Checkout" component={CheckoutScreen} />
           <Stack.Screen name="Success" component={SuccessScreen} options={{ gestureEnabled: false }} />
+          <Stack.Screen name="TicketDetail" component={TicketDetailScreen} />
 
           {/* Profile & Settings */}
           <Stack.Screen name="Profile" component={ProfileScreen} />
@@ -101,7 +133,10 @@ export const RootNavigator = () => {
           <Stack.Screen name="PlatProDashboard" component={PlatProDashboardScreen} />
           <Stack.Screen name="PlatProEvents" component={PlatProEventsScreen} />
           <Stack.Screen name="PlatProCreateEvent" component={PlatProCreateEventScreen} />
-          <Stack.Screen name="Wallet" component={WalletScreen} /> 
+          <Stack.Screen name="PlatProApply" component={PlatProApplyScreen} />
+          <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+          <Stack.Screen name="CheckInScanner" component={CheckInScannerScreen} />
+          <Stack.Screen name="Wallet" component={WalletScreen} />
         </Stack.Group>
       )}
     </Stack.Navigator>

@@ -80,7 +80,10 @@ export function TicketSelectionScreen({ navigation, route }: any) {
       .filter(tt => (quantities[tt.id] || 0) > 0)
       .map(tt => ({
         ticketTypeId: tt.id,
+        ticketTypeName: tt.name,
         quantity: quantities[tt.id],
+        unitPrice: Number(tt.price),
+        currency: tt.currency || 'KES',
       }));
 
     if (items.length === 0) {
@@ -92,7 +95,7 @@ export function TicketSelectionScreen({ navigation, route }: any) {
       eventId: eventId || event?.id,
       event,
       items,
-      total,
+      subtotal: total,
     });
   };
 

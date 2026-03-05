@@ -16,14 +16,16 @@ import { ChevronLeft, Heart, Calendar, MapPin } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { favoritesService } from '../../services/favoritesService';
 import { eventsService, Event } from '../../services/eventsService';
+import { theme } from '../../design/theme';
 
+const { colors } = theme;
 const COLORS = {
-  primary: '#000000',
-  accent: '#8B5CF6',
-  background: '#FFFFFF',
-  surface: '#F5F5F5',
-  textPrimary: '#1A1A1A',
-  textSecondary: '#666666',
+  accent: colors.primary[500],
+  background: colors.dark.background,
+  surface: colors.dark.surface,
+  surfaceVariant: colors.dark.surfaceVariant,
+  textPrimary: colors.dark.text,
+  textSecondary: colors.dark.textSecondary,
 };
 
 export function FavoritesScreen() {
@@ -77,9 +79,9 @@ export function FavoritesScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <ChevronLeft size={24} color={COLORS.primary} />
+            <ChevronLeft size={24} color={COLORS.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Favorites</Text>
+          <Text style={styles.headerTitle}>Saved</Text>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={COLORS.accent} />
@@ -93,9 +95,9 @@ export function FavoritesScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ChevronLeft size={24} color={COLORS.primary} />
+          <ChevronLeft size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Favorites</Text>
+        <Text style={styles.headerTitle}>Saved</Text>
       </View>
       {events.length === 0 ? (
         <ScrollView
@@ -123,7 +125,7 @@ export function FavoritesScreen() {
               {imageUri(item) ? (
                 <Image source={{ uri: imageUri(item) }} style={styles.cardImage} />
               ) : (
-                <View style={[styles.cardImage, { backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center' }]}>
+                <View style={[styles.cardImage, { backgroundColor: COLORS.surfaceVariant, justifyContent: 'center', alignItems: 'center' }]}>
                   <Calendar size={32} color={COLORS.textSecondary} />
                 </View>
               )}
@@ -155,7 +157,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.surface,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   backButton: { padding: 8, marginRight: 8 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.textPrimary },
@@ -172,10 +174,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     overflow: 'hidden',
   },
-  cardImage: { width: 100, height: 100, backgroundColor: '#EEE' },
+  cardImage: { width: 100, height: 100, backgroundColor: COLORS.surfaceVariant },
   cardContent: { flex: 1, padding: 12, justifyContent: 'center' },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 4 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   metaText: { fontSize: 12, color: COLORS.textSecondary, flex: 1 },
-  cardPrice: { fontSize: 14, fontWeight: 'bold', color: COLORS.primary, marginTop: 4 },
+  cardPrice: { fontSize: 14, fontWeight: 'bold', color: COLORS.accent, marginTop: 4 },
 });

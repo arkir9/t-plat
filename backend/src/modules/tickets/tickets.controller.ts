@@ -18,6 +18,7 @@ import {
   GiftTicketDto,
   JoinWaitlistDto,
   CreateRefundRequestDto,
+  CheckInDto,
 } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -77,6 +78,20 @@ export class TicketsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getMyTickets(@CurrentUser() user: User) {
     return this.ticketsService.getUserTickets(user.id);
+  }
+
+  @Post('check-in')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Check in a ticket at the door (organizer only)' })
+  @ApiResponse({ status: 200, description: 'Ticket checked in successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid QR, already scanned, or inactive ticket' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Not the organizer of this event' })
+  @ApiResponse({ status: 404, description: 'Ticket not found' })
+  async checkIn(@CurrentUser() user: User, @Body() checkInDto: CheckInDto) {
+    return this.ticketsService.checkIn(checkInDto.qrCode, user.id);
   }
 
   @Get(':id([0-9a-fA-F-]{36})')

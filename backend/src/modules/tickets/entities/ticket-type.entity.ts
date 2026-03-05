@@ -10,7 +10,7 @@ import {
   Index,
 } from 'typeorm';
 import { Event } from '../../events/entities/event.entity';
-import { OrderItem } from './order-item.entity';
+import type { OrderItem } from './order-item.entity';
 
 export enum Currency {
   KES = 'KES',

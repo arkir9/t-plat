@@ -19,6 +19,16 @@ export const ticketsService = {
     return response.data;
   },
 
+  async getTicketById(ticketId: string) {
+    const response = await api.get(`/tickets/${ticketId}`);
+    return response.data;
+  },
+
+  async checkIn(qrCode: string) {
+    const response = await api.post('/tickets/check-in', { qrCode });
+    return response.data;
+  },
+
   async purchaseTickets(eventId: string, items: { ticketTypeId: string; quantity: number }[], paymentMethod: string, phoneNumber?: string) {
     const response = await api.post('/tickets/orders', {
       eventId,

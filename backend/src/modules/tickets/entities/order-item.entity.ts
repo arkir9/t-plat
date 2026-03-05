@@ -6,8 +6,8 @@ import {
   JoinColumn,
   CreateDateColumn,
 } from 'typeorm';
-import { Order } from './order.entity';
-import { TicketType } from './ticket-type.entity';
+import type { Order } from './order.entity';
+import type { TicketType } from './ticket-type.entity';
 
 @Entity('order_items')
 export class OrderItem {

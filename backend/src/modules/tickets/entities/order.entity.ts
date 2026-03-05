@@ -12,7 +12,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Event } from '../../events/entities/event.entity';
 import { OrderItem } from './order-item.entity';
-import { Ticket } from './ticket.entity';
+import type { Ticket } from './ticket.entity';
 
 export enum PaymentStatus {
   PENDING = 'pending',

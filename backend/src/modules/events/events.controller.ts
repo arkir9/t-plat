@@ -78,14 +78,15 @@ export class EventsController {
     return this.eventsService.getNearbyEvents(query);
   }
 
-  // --- NEW: Manual Scrape Trigger ---
   @Public()
-  @Get('trigger-scrape')
-  async triggerScrape() {
-    await this.eventIngestionService.handleCron();
-    return { message: 'Scrape triggered. Check server logs.' };
+  @Post('dev/trigger-scraper')
+  async triggerScraper() {
+    if (process.env.NODE_ENV === 'production') {
+      throw new BadRequestException('This endpoint is disabled in production');
+    }
+    this.eventIngestionService.handleCron().catch(() => {});
+    return { message: 'Scraper triggered. Watch server logs for progress.' };
   }
-  // ----------------------------------
 
   @Get('my-events')
   @UseGuards(JwtAuthGuard)

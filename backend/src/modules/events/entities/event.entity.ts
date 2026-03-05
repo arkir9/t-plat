@@ -160,6 +160,13 @@ export class Event {
   externalUrl?: string;
   // -----------------------------
 
+  // Lightweight scraper metadata for hash-based freshness checks
+  @Column({ name: 'content_hash', type: 'text', nullable: true })
+  contentHash?: string | null;
+
+  @Column({ name: 'last_scraped_at', type: 'timestamp', nullable: true })
+  lastScrapedAt?: Date | null;
+
   // Pricing & fee configuration
 
   @Column({

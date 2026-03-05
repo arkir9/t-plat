@@ -32,6 +32,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SafetyModule } from './modules/safety/safety.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -109,6 +110,7 @@ import { HealthModule } from './health/health.module';
     ReviewsModule,
     SafetyModule,
     FavoritesModule,
+    AdminModule,
     HealthModule,
   ],
   providers: [

@@ -5,3 +5,4 @@ export * from './gift-ticket.dto';
 export * from './join-waitlist.dto';
 export * from './create-refund-request.dto';
 export * from './ticket-response.dto';
+export * from './check-in.dto';

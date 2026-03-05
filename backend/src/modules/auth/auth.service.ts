@@ -272,9 +272,9 @@ export class AuthService {
   private sanitizeUser(user: User) {
     const { passwordHash, ...rest } = user;
     const profiles = (rest as any).organizerProfiles;
-    return {
-      ...rest,
-      role: profiles?.length ? 'organizer' : 'user',
-    };
+    const role: 'user' | 'organizer' | 'admin' = rest.role !== 'user'
+      ? rest.role
+      : profiles?.length ? 'organizer' : 'user';
+    return { ...rest, role };
   }
 }

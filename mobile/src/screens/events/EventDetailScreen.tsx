@@ -11,9 +11,18 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  ChevronLeft, Share, Heart, Calendar, MapPin, 
-  ShieldCheck, Globe, CheckCircle, AlertCircle 
+import {
+  ChevronLeft,
+  Share,
+  Heart,
+  Calendar,
+  MapPin,
+  ShieldCheck,
+  Globe,
+  CheckCircle,
+  AlertCircle,
+  Navigation,
+  Info,
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { SocialShareModal } from '../../components/SocialShareModal';
@@ -22,21 +31,23 @@ import { favoritesService } from '../../services/favoritesService';
 import { ticketsService } from '../../services/ticketsService';
 import { Event } from '../../types';
 import { useAuthStore } from '../../store/authStore';
+import { theme } from '../../design/theme';
+
+const { colors } = theme;
 
 const COLORS = {
-  primary: '#000000',
-  accent: '#8B5CF6',
-  verified: '#10B981', 
-  unverified: 'rgba(0,0,0,0.6)',
-  background: '#FFFFFF',
-  surface: '#F5F5F5',
-  textPrimary: '#1A1A1A',
-  textSecondary: '#666666',
-  textLight: '#999999',
+  background: colors.dark.background,
+  surface: colors.dark.surface,
+  surfaceVariant: colors.dark.surfaceVariant,
+  accent: colors.primary[500],
+  text: colors.dark.text,
+  textSecondary: colors.dark.textSecondary,
+  verified: '#10B981',
+  unverified: 'rgba(255,255,255,0.4)',
   white: '#FFFFFF',
 };
 
-const SPACING = { s: 8, m: 16, l: 24, xl: 32 };
+const SPACING = theme.spacing;
 
 export function EventDetailScreen({ route, navigation }: any) {
   const { eventId, event: eventParam } = route.params || {};
@@ -71,7 +82,7 @@ export function EventDetailScreen({ route, navigation }: any) {
     try {
       const eventData = await eventsService.getEventById(eventId);
       setEvent(eventData);
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to load event details.');
       navigation.goBack();
     } finally {
@@ -101,7 +112,7 @@ export function EventDetailScreen({ route, navigation }: any) {
     try {
       await ticketsService.joinWaitlist(event.id);
       Alert.alert('Success', 'You have joined the waitlist.');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Could not join waitlist.');
     } finally {
       setJoiningWaitlist(false);
@@ -122,7 +133,7 @@ export function EventDetailScreen({ route, navigation }: any) {
               await eventsService.claimEvent(event!.id);
               Alert.alert('Success', 'You now own this event listing!');
               loadEvent();
-            } catch (error) {
+            } catch {
               Alert.alert('Error', 'Failed to claim event.');
             } finally {
               setIsClaiming(false);
@@ -135,92 +146,154 @@ export function EventDetailScreen({ route, navigation }: any) {
 
   if (isLoading || !event) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, styles.loadingContainer]}>
         <ActivityIndicator size="large" color={COLORS.accent} />
       </View>
     );
   }
 
-  const formattedDate = format(new Date(event.startDate), 'EEE, MMM d • h:mm a');
-  
+  const formattedDate = format(new Date(event.startDate), 'EEEE, MMMM d, yyyy');
+  const timeRange = event.endDate
+    ? `${format(new Date(event.startDate), 'h:mm a')} - ${format(new Date(event.endDate), 'h:mm a')}`
+    : format(new Date(event.startDate), 'h:mm a');
   const locationText = (() => {
     if (event.customLocation) {
-        const { address, city } = event.customLocation;
-        if (address && city) return `${address}, ${city}`;
-        return address || city || 'Location TBD';
+      const { address, city } = event.customLocation;
+      if (address && city) return `${address}, ${city}`;
+      return address || city || 'Location TBD';
     }
     if (event.venue) {
-        return `${event.venue.name}, ${event.venue.venueCity || 'Nairobi'}`;
+      return `${event.venue.name}, ${event.venue.venueCity || 'Nairobi'}`;
     }
     return 'Location TBD';
   })();
-  
+  const addressLine = event.customLocation?.address || event.venue?.venueAddress || '';
+
   const priceDisplay = (() => {
     if (event.ticketTypes && event.ticketTypes.length > 0) {
       const min = Math.min(...event.ticketTypes.map((t: any) => Number(t.price)));
-      if (min > 0) return event.ticketTypes.length > 1 ? `From KES ${min.toLocaleString()}` : `KES ${min.toLocaleString()}`;
+      if (min > 0)
+        return event.ticketTypes.length > 1 ? `From KES ${min.toLocaleString()}` : `KES ${min.toLocaleString()}`;
     }
     if (event.price != null && event.price > 0) return `KES ${event.price.toLocaleString()}`;
     return null;
   })();
 
   const imageUri = event.images?.[0] ?? event.images?.[1];
-  const organizerName = event.organizer?.name || 'Unknown Organizer';
+  const organizerName = event.organizer?.name || 'Electric Dreams Collective';
+  const eventTypeLabel = (event.eventType || 'music').toUpperCase().replace('_', ' & ');
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
         <View style={styles.heroContainer}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.heroImage} />
           ) : (
-            <View style={[styles.heroImage, { backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center' }]}>
-              <Calendar size={48} color={COLORS.textLight} />
+            <View style={[styles.heroImage, styles.heroPlaceholder]}>
+              <Text style={styles.heroPlaceholderText}>EVENT BANNER</Text>
             </View>
           )}
           <View style={styles.heroOverlay} />
-          <SafeAreaView style={styles.heroHeader}>
+          <SafeAreaView style={styles.heroHeader} edges={['top']}>
             <TouchableOpacity style={styles.iconCircle} onPress={() => navigation.goBack()}>
-              <ChevronLeft size={24} color={COLORS.primary} />
+              <ChevronLeft size={24} color={COLORS.text} />
             </TouchableOpacity>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity style={styles.iconCircle} onPress={() => setShareModalVisible(true)}>
-                <Share size={20} color={COLORS.primary} />
-              </TouchableOpacity>
+            <Text style={styles.platLabel}>Plat</Text>
+            <View style={styles.headerRight}>
               <TouchableOpacity style={styles.iconCircle} onPress={toggleFavorite} disabled={favoriteLoading}>
-                <Heart size={20} color={isFavorite ? '#EF4444' : COLORS.primary} fill={isFavorite ? '#EF4444' : 'transparent'} />
+                <Heart size={20} color={isFavorite ? '#EF4444' : COLORS.accent} fill={isFavorite ? '#EF4444' : 'transparent'} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconCircle} onPress={() => setShareModalVisible(true)}>
+                <Share size={20} color={COLORS.accent} />
               </TouchableOpacity>
             </View>
           </SafeAreaView>
           <View style={styles.badgeContainer}>
-            {event.isClaimed || event.source === 'internal' ? (
-              <View style={[styles.badge, { backgroundColor: COLORS.verified }]}>
-                <ShieldCheck size={14} color="white" />
-                <Text style={styles.badgeText}>Official Event</Text>
-              </View>
-            ) : (
-              <View style={[styles.badge, { backgroundColor: COLORS.unverified }]}>
-                <Globe size={14} color="white" />
-                <Text style={styles.badgeText}>Sourced from Web</Text>
-              </View>
-            )}
+            <View style={[styles.categoryBadge, { backgroundColor: COLORS.accent }]}>
+              <Text style={styles.badgeText}>{eventTypeLabel}</Text>
+            </View>
+            <View style={styles.viewsRow}>
+              <Text style={styles.viewsText}>1.2k viewed</Text>
+            </View>
           </View>
         </View>
 
         <View style={styles.detailContent}>
           <Text style={styles.detailTitle}>{event.title}</Text>
-          <View style={styles.organizerRow}>
-            {event.isClaimed ? (
-              <>
-                <CheckCircle size={16} color={COLORS.verified} />
-                <Text style={styles.organizerName}>By {organizerName}</Text>
-              </>
-            ) : (
-              <>
-                <AlertCircle size={16} color={COLORS.textLight} />
-                <Text style={styles.organizerName}>Listed via {event.source}</Text>
-              </>
-            )}
+
+          <View style={styles.infoCard}>
+            <View style={styles.infoIconCircle}>
+              <Calendar size={22} color={COLORS.white} />
+            </View>
+            <View style={styles.infoTextBlock}>
+              <Text style={styles.infoValue}>{formattedDate}</Text>
+              <Text style={styles.infoSub}>{timeRange}</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoCard}>
+            <View style={styles.infoIconCircle}>
+              <MapPin size={22} color={COLORS.white} />
+            </View>
+            <View style={styles.infoTextBlock}>
+              <Text style={styles.infoValue}>{locationText.split(',')[0]}</Text>
+              <Text style={styles.infoSub}>{addressLine || locationText}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.mapCard}>
+            <View style={styles.mapThumbnail} />
+            <View style={styles.getDirectionsBtn}>
+              <Navigation size={18} color={COLORS.accent} />
+              <Text style={styles.getDirectionsText}>GET DIRECTIONS</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.organizerCard}>
+            <View style={styles.organizerAvatar} />
+            <View style={styles.organizerInfo}>
+              <Text style={styles.organizerLabel}>ORGANIZED BY</Text>
+              <Text style={styles.organizerName}>{organizerName}</Text>
+            </View>
+            <TouchableOpacity style={styles.followBtn}>
+              <Text style={styles.followBtnText}>FOLLOW</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.sectionHeader}>ABOUT THIS EVENT</Text>
+          <View style={styles.descriptionBlock}>
+            {(event.description || 'No description available.')
+              .split(/\n\n+/)
+              .filter(Boolean)
+              .map((para, i) => (
+                <Text key={i} style={styles.descriptionText}>
+                  {para.trim()}
+                </Text>
+              ))}
+          </View>
+
+          <TouchableOpacity>
+            <Text style={styles.readMoreLink}>READ MORE</Text>
+          </TouchableOpacity>
+
+          <View style={styles.policyCard}>
+            <View style={styles.infoIconCircle}>
+              <CheckCircle size={20} color={COLORS.white} />
+            </View>
+            <View style={styles.infoTextBlock}>
+              <Text style={styles.infoValue}>Verified Tickets</Text>
+              <Text style={styles.infoSub}>Secure entry with our digital verification system.</Text>
+            </View>
+          </View>
+          <View style={styles.policyCard}>
+            <View style={[styles.infoIconCircle, { backgroundColor: COLORS.accent }]}>
+              <Info size={20} color={COLORS.white} />
+            </View>
+            <View style={styles.infoTextBlock}>
+              <Text style={styles.infoValue}>Refund Policy</Text>
+              <Text style={styles.infoSub}>Up to 7 days before event start date.</Text>
+            </View>
           </View>
 
           {canClaim && (
@@ -230,32 +303,14 @@ export function EventDetailScreen({ route, navigation }: any) {
                 <Text style={styles.claimSubtitle}>Claim this event to manage tickets & details.</Text>
               </View>
               <TouchableOpacity style={styles.claimButton} onPress={handleClaimEvent} disabled={isClaiming}>
-                {isClaiming ? <ActivityIndicator color="white" size="small"/> : <Text style={styles.claimButtonText}>Claim</Text>}
+                {isClaiming ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text style={styles.claimButtonText}>Claim</Text>
+                )}
               </TouchableOpacity>
             </View>
           )}
-
-          <View style={styles.divider} />
-
-          <View style={styles.detailRow}>
-            <View style={styles.detailIconBox}><Calendar size={24} color={COLORS.accent} /></View>
-            <View><Text style={styles.detailLabel}>Date & Time</Text><Text style={styles.detailValue}>{formattedDate}</Text></View>
-          </View>
-
-          <View style={styles.detailRow}>
-            <View style={styles.detailIconBox}><MapPin size={24} color={COLORS.accent} /></View>
-            <View style={{flex: 1}}><Text style={styles.detailLabel}>Location</Text><Text style={styles.detailValue}>{locationText}</Text></View>
-          </View>
-
-          <Text style={styles.sectionHeader}>About this event</Text>
-          <View style={styles.descriptionBlock}>
-            {(event.description || 'No description available.')
-              .split(/\n\n+/)
-              .filter(Boolean)
-              .map((para, i) => (
-                <Text key={i} style={styles.descriptionText}>{para.trim()}</Text>
-              ))}
-          </View>
 
           {!event.isClaimed && event.externalUrl && (
             <TouchableOpacity style={styles.sourceLinkButton} onPress={() => Linking.openURL(event.externalUrl!)}>
@@ -266,27 +321,31 @@ export function EventDetailScreen({ route, navigation }: any) {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <View style={{ flex: 1 }}>
-          {priceDisplay != null && (
-            <>
-              <Text style={styles.priceLabel}>Price</Text>
-              <Text style={styles.priceValue}>{priceDisplay}</Text>
-            </>
-          )}
-          {event.isClaimed && (
-            <TouchableOpacity onPress={handleJoinWaitlist} disabled={joiningWaitlist}>
-              <Text style={styles.secondaryButtonText}>{joiningWaitlist ? 'Joining...' : 'Join Waitlist'}</Text>
-            </TouchableOpacity>
-          )}
+        <View style={styles.priceBlock}>
+          <Text style={styles.priceLabel}>TICKETS FROM</Text>
+          <Text style={styles.priceValue}>{priceDisplay ?? 'Free'}</Text>
         </View>
-        
         {event.isClaimed ? (
-          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('TicketSelection', { eventId: event.id, event })}>
-            <Text style={styles.primaryButtonText}>Select Tickets</Text>
-          </TouchableOpacity>
+          <>
+            {event.ticketTypes?.length ? (
+              <TouchableOpacity
+                style={styles.bookButton}
+                onPress={() => navigation.navigate('TicketSelection', { eventId: event.id, event })}
+              >
+                <Text style={styles.bookButtonText}>BOOK NOW</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.bookButton} onPress={handleJoinWaitlist} disabled={joiningWaitlist}>
+                <Text style={styles.bookButtonText}>{joiningWaitlist ? 'Joining...' : 'Join Waitlist'}</Text>
+              </TouchableOpacity>
+            )}
+          </>
         ) : (
-          <TouchableOpacity style={[styles.primaryButton, { backgroundColor: COLORS.textSecondary }]} onPress={() => event.externalUrl && Linking.openURL(event.externalUrl)}>
-            <Text style={styles.primaryButtonText}>Visit Website</Text>
+          <TouchableOpacity
+            style={[styles.bookButton, { backgroundColor: COLORS.textSecondary }]}
+            onPress={() => event.externalUrl && Linking.openURL(event.externalUrl)}
+          >
+            <Text style={styles.bookButtonText}>Visit Website</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -294,7 +353,12 @@ export function EventDetailScreen({ route, navigation }: any) {
       <SocialShareModal
         visible={shareModalVisible}
         onClose={() => setShareModalVisible(false)}
-        event={{ id: event.id, title: event.title, date: formattedDate, image: imageUri || '' }}
+        event={{
+          id: event.id,
+          title: event.title,
+          date: formattedDate,
+          image: imageUri || '',
+        }}
       />
     </View>
   );
@@ -302,38 +366,199 @@ export function EventDetailScreen({ route, navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  heroContainer: { height: 300, position: 'relative' },
-  heroImage: { width: '100%', height: '100%' },
-  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.1)' },
-  heroHeader: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', padding: SPACING.m },
-  iconCircle: { width: 40, height: 40, backgroundColor: COLORS.white, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  badgeContainer: { position: 'absolute', bottom: 40, left: SPACING.m },
-  badge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 6 },
-  badgeText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
-  detailContent: { padding: SPACING.m, backgroundColor: COLORS.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -24 },
-  detailTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.primary, marginBottom: 4 },
-  organizerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: SPACING.l },
-  organizerName: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '500' },
-  claimBanner: { backgroundColor: '#F3E8FF', borderRadius: 12, padding: SPACING.m, marginBottom: SPACING.l, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#D8B4FE' },
-  claimTextContainer: { flex: 1, marginRight: 12 },
-  claimTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.accent },
-  claimSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
-  claimButton: { backgroundColor: COLORS.accent, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  claimButtonText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
-  divider: { height: 1, backgroundColor: COLORS.surface, marginBottom: SPACING.l },
-  detailRow: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.l, gap: SPACING.m },
-  detailIconBox: { width: 48, height: 48, backgroundColor: COLORS.surface, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  detailLabel: { fontSize: 12, color: COLORS.textLight, marginBottom: 2 },
-  detailValue: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary },
-  sectionHeader: { fontSize: 18, fontWeight: 'bold', marginTop: SPACING.m, marginBottom: SPACING.s },
+  loadingContainer: { justifyContent: 'center', alignItems: 'center' },
+  heroContainer: { height: 280, position: 'relative' },
+  heroImage: { width: '100%', height: '100%', backgroundColor: COLORS.surfaceVariant },
+  heroPlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  heroPlaceholderText: { fontSize: 18, fontWeight: '700', color: COLORS.textSecondary },
+  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)' },
+  heroHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  platLabel: { fontSize: 18, fontWeight: '700', color: COLORS.accent, marginLeft: 12 },
+  headerRight: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
+  badgeContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: SPACING.md,
+    right: SPACING.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  badgeText: { color: COLORS.white, fontWeight: '700', fontSize: 12 },
+  viewsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  viewsText: { fontSize: 13, color: COLORS.textSecondary },
+  detailContent: { padding: SPACING.md },
+  detailTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: SPACING.lg,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  infoIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.md,
+  },
+  infoTextBlock: { flex: 1 },
+  infoValue: { fontSize: 16, fontWeight: '600', color: COLORS.text },
+  infoSub: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+  mapCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: SPACING.md,
+  },
+  mapThumbnail: {
+    height: 120,
+    backgroundColor: COLORS.surfaceVariant,
+  },
+  getDirectionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: SPACING.md,
+  },
+  getDirectionsText: { fontSize: 14, fontWeight: '700', color: COLORS.accent },
+  organizerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  organizerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.accent,
+    marginRight: SPACING.md,
+  },
+  organizerInfo: { flex: 1 },
+  organizerLabel: { fontSize: 10, color: COLORS.textSecondary, letterSpacing: 1, marginBottom: 2 },
+  organizerName: { fontSize: 16, fontWeight: '700', color: COLORS.text },
+  followBtn: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+  followBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
   descriptionBlock: {},
-  descriptionText: { fontSize: 15, lineHeight: 24, color: COLORS.textSecondary, marginBottom: 12 },
-  sourceLinkButton: { marginTop: SPACING.l, padding: SPACING.m, backgroundColor: COLORS.surface, borderRadius: 8, alignItems: 'center' },
+  descriptionText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: COLORS.textSecondary,
+    marginBottom: 12,
+  },
+  readMoreLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.accent,
+    marginBottom: SPACING.lg,
+  },
+  policyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  claimBanner: {
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+    borderRadius: 12,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(139, 92, 246, 0.4)',
+  },
+  claimTextContainer: { flex: 1, marginRight: 12 },
+  claimTitle: { fontSize: 14, fontWeight: '700', color: COLORS.accent },
+  claimSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  claimButton: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  claimButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 12 },
+  sourceLinkButton: {
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   sourceLinkText: { color: COLORS.textSecondary, fontWeight: '600' },
-  bottomBar: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: COLORS.white, padding: SPACING.m, paddingBottom: 32, borderTopWidth: 1, borderTopColor: COLORS.surface, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
-  priceLabel: { fontSize: 12, color: COLORS.textLight },
-  priceValue: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary },
-  primaryButton: { backgroundColor: COLORS.primary, paddingHorizontal: 24, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', minWidth: 140 },
-  primaryButtonText: { color: COLORS.white, fontWeight: 'bold', fontSize: 16 },
-  secondaryButtonText: { color: COLORS.accent, fontSize: 12, fontWeight: '600', marginTop: 4 },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    padding: SPACING.md,
+    paddingBottom: 36,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.surfaceVariant,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  priceBlock: {},
+  priceLabel: { fontSize: 12, color: COLORS.textSecondary },
+  priceValue: { fontSize: 24, fontWeight: '700', color: COLORS.text },
+  bookButton: {
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 28,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookButtonText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
 });

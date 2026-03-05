@@ -1,30 +1,33 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import { View, StyleSheet, Animated } from 'react-native';
 
 export const SplashScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-    // Logo Fade In
-    Animated.timing(logoOpacity, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-    }).start(() => {
-      // Navigate to Onboarding after animation
-      setTimeout(() => {
-        navigation.replace('Onboarding', undefined);
-      }, 1500);
-    });
-  }, []);
+    Animated.parallel([
+      Animated.timing(logoOpacity, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(logoScale, {
+        toValue: 1,
+        friction: 6,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [logoOpacity, logoScale]);
 
   return (
-    <View style={styles.splashContainer}>
-      <Animated.Text style={[styles.splashLogo, { opacity: logoOpacity }]}>
+    <View style={styles.container}>
+      <Animated.Text
+        style={[
+          styles.logo,
+          { opacity: logoOpacity, transform: [{ scale: logoScale }] },
+        ]}
+      >
         plat
       </Animated.Text>
     </View>
@@ -32,13 +35,13 @@ export const SplashScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  splashContainer: {
+  container: {
     flex: 1,
     backgroundColor: '#000',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  splashLogo: {
+  logo: {
     fontSize: 60,
     fontWeight: '800',
     fontStyle: 'italic',

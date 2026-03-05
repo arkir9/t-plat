@@ -10,9 +10,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { QrCode, Calendar, MapPin, Clock } from 'lucide-react-native';
-import { ticketsService } from '../../services/ticketsService'; 
+import { QrCode, Calendar, MapPin, Clock, WifiOff } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ticketsService } from '../../services/ticketsService';
 import { format } from 'date-fns';
+
+const TICKETS_CACHE_KEY = '@tplat_tickets_cache';
 
 const COLORS = {
   primary: '#000000',
@@ -21,19 +24,34 @@ const COLORS = {
   text: '#1A1A1A',
   textSec: '#666666',
   accent: '#8B5CF6',
+  warning: '#F59E0B',
 };
 
 export function MyTicketScreen({ navigation }: any) {
   const [tickets, setTickets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   const loadTickets = useCallback(async () => {
     try {
-      const data = await ticketsService.getMyTickets(); 
-      setTickets(Array.isArray(data) ? data : data.items || []);
+      const data = await ticketsService.getMyTickets();
+      const list = Array.isArray(data) ? data : data.items || [];
+      setTickets(list);
+      setIsOffline(false);
+      try {
+        await AsyncStorage.setItem(TICKETS_CACHE_KEY, JSON.stringify(list));
+      } catch {}
     } catch (error) {
-      console.log('Failed to load tickets', error);
+      try {
+        const cached = await AsyncStorage.getItem(TICKETS_CACHE_KEY);
+        if (cached) {
+          setTickets(JSON.parse(cached));
+          setIsOffline(true);
+        }
+      } catch {
+        console.log('Failed to load cached tickets');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -60,7 +78,7 @@ export function MyTicketScreen({ navigation }: any) {
         : (event.venue?.name || 'Nairobi');
     // ----------------------------------
 
-    const imageUri = event.images?.[1] ?? event.images?.[0] || 'https://via.placeholder.com/100';
+    const imageUri = (event.images?.[1] ?? event.images?.[0]) || 'https://via.placeholder.com/100';
 
     return (
       <TouchableOpacity
@@ -113,6 +131,15 @@ export function MyTicketScreen({ navigation }: any) {
         <Text style={styles.headerTitle}>My Tickets</Text>
       </View>
 
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <WifiOff size={16} color={COLORS.warning} />
+          <Text style={styles.offlineBannerText}>
+            Viewing cached tickets. Pull to refresh when online.
+          </Text>
+        </View>
+      )}
+
       {loading && !refreshing ? (
         <View style={styles.center}><ActivityIndicator size="large" color={COLORS.accent} /></View>
       ) : (
@@ -158,4 +185,22 @@ const styles = StyleSheet.create({
   emptyContainer: { alignItems: 'center', marginTop: 80, paddingHorizontal: 40 },
   emptyTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.text, marginTop: 16 },
   emptyText: { textAlign: 'center', color: COLORS.textSec, marginTop: 8, lineHeight: 20 },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245,158,11,0.1)',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 10,
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.warning,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
 });

@@ -20,36 +20,44 @@ import {
   Filter,
   ShieldCheck,
   Globe,
+  Music,
+  Palette,
+  Activity,
+  Bell,
+  Ticket,
 } from 'lucide-react-native';
 import { eventsService } from '../../services/eventsService';
 import type { Event } from '../../types';
 import { format } from 'date-fns';
+import { theme } from '../../design/theme';
 
+const { colors, spacing, borderRadius } = theme;
+
+// Dark theme colors
 const COLORS = {
-  primary: '#000000',
-  accent: '#8B5CF6',
-  background: '#FFFFFF',
-  surface: '#F5F5F5',
-  textPrimary: '#1A1A1A',
-  textSecondary: '#666666',
-  textLight: '#999999',
+  primary: colors.dark.background,
+  accent: colors.primary[500],
+  background: colors.dark.background,
+  surface: colors.dark.surface,
+  surfaceVariant: colors.dark.surfaceVariant,
+  textPrimary: colors.dark.text,
+  textSecondary: colors.dark.textSecondary,
+  textLight: colors.dark.textTertiary,
   white: '#FFFFFF',
   verified: '#10B981',
-  unverified: 'rgba(0,0,0,0.6)', 
+  unverified: 'rgba(255,255,255,0.4)',
 };
 
-const SPACING = { s: 8, m: 16, l: 24, xl: 32 };
-
-const CATEGORIES: Array<{ label: string; eventType?: string }> = [
-  { label: 'All' },
-  { label: 'Nightlife', eventType: 'nightlife' },
-  { label: 'Concerts', eventType: 'concert' },
-  { label: 'Festivals', eventType: 'festival' },
-  { label: 'Arts', eventType: 'arts_culture' },
-  { label: 'Sports', eventType: 'sports' },
-  { label: 'Business', eventType: 'business' },
-  { label: 'Community', eventType: 'community' },
-  { label: 'Other', eventType: 'other' },
+const SPACING = spacing;
+const CATEGORIES = [
+  { label: 'All', value: undefined, icon: null },
+  { label: 'Nightlife', value: 'nightlife', icon: null },
+  { label: 'Concerts', value: 'concert', icon: Music },
+  { label: 'Festivals', value: 'festival', icon: Music },
+  { label: 'Arts', value: 'arts_culture', icon: Palette },
+  { label: 'Sports', value: 'sports', icon: Activity },
+  { label: 'Business', value: 'business', icon: null },
+  { label: 'Community', value: 'community', icon: null },
 ];
 
 const formatEventDate = (dateString: string) => {
@@ -69,24 +77,35 @@ const getLocationString = (event: Event) => {
     return address || city || 'Nairobi';
   }
   if (event.locationType === 'venue' && event.venue) {
-    return event.venue.name || event.venue.venueCity || 'Venue'; 
+    return event.venue.name || event.venue.venueCity || 'Venue';
   }
   return 'Location TBD';
 };
 
-const CategoryChip = ({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) => (
+const CategoryChip = ({
+  label,
+  active,
+  onPress,
+  Icon,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  Icon?: any;
+}) => (
   <TouchableOpacity
     style={[styles.chip, active && styles.chipActive]}
     onPress={onPress}
   >
+    {Icon && <Icon size={18} color={active ? COLORS.white : COLORS.textSecondary} style={{ marginRight: 6 }} />}
     <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
   </TouchableOpacity>
 );
 
-const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) => {
+const EventCard = ({ event, onPress, showFeatured }: { event: Event; onPress: () => void; showFeatured?: boolean }) => {
   const location = getLocationString(event);
   const formattedDate = formatEventDate(event.startDate);
-  
+
   let priceDisplay: string | null = null;
   if (event.ticketTypes && event.ticketTypes.length > 0) {
     const minPrice = Math.min(...event.ticketTypes.map((t: any) => Number(t.price)));
@@ -96,39 +115,46 @@ const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) =>
   }
 
   const isOfficial = event.isClaimed || event.source === 'internal';
-  const imageUri = event.images?.[1] ?? event.images?.[0];
+  const imageUri = event.images?.[0];
+  const dateTag = event.startDate ? format(new Date(event.startDate), 'dd MMM') : '';
 
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
-      <View style={styles.imageContainer}>
+      <View style={styles.cardImageWrapper}>
         {imageUri ? (
           <Image source={{ uri: imageUri }} style={styles.cardImage} />
         ) : (
-          <View style={[styles.cardImage, { backgroundColor: COLORS.surface, justifyContent: 'center', alignItems: 'center' }]}>
-            <Calendar size={32} color={COLORS.textLight} />
+          <View style={[styles.cardImage, styles.cardImagePlaceholder]}>
+            <Calendar size={40} color={COLORS.textLight} />
           </View>
         )}
-        <View style={[styles.badge, { backgroundColor: isOfficial ? COLORS.verified : COLORS.unverified }]}>
-          {isOfficial ? <ShieldCheck size={14} color="white" /> : <Globe size={14} color="white" />}
+        {showFeatured && (
+          <View style={styles.featuredBadge}>
+            <Text style={styles.featuredBadgeText}>FEATURED</Text>
+          </View>
+        )}
+        <View style={styles.dateBadge}>
+          <Text style={styles.dateBadgeText}>{dateTag}</Text>
         </View>
       </View>
-
       <View style={styles.cardContent}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{event.title}</Text>
-        
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {event.title}
+        </Text>
         <View style={styles.cardMetaRow}>
-          <Calendar size={14} color={COLORS.textSecondary} />
-          <Text style={styles.cardMetaText}>{formattedDate}</Text>
+          <MapPin size={14} color={COLORS.accent} />
+          <Text style={styles.cardMetaText} numberOfLines={1}>
+            {location}
+          </Text>
         </View>
-        
         <View style={styles.cardMetaRow}>
-          <MapPin size={14} color={COLORS.textSecondary} />
-          <Text style={styles.cardMetaText} numberOfLines={1}>{location}</Text>
+          <Ticket size={14} color={COLORS.accent} />
+          <Text style={styles.cardMetaText}>{priceDisplay ?? 'FREE ENTRY'}</Text>
         </View>
-
         <View style={styles.cardFooter}>
-          {priceDisplay != null && <Text style={styles.cardPrice}>{priceDisplay}</Text>}
-          {!isOfficial && <Text style={styles.sourceText}>via {event.source}</Text>}
+          <TouchableOpacity style={styles.bookButton} onPress={onPress} activeOpacity={0.9}>
+            <Text style={styles.bookButtonText}>Book</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -137,51 +163,62 @@ const EventCard = ({ event, onPress }: { event: Event; onPress: () => void }) =>
 
 export function HomeScreen() {
   const navigation = useNavigation<any>();
-  const [activeCategory, setActiveCategory] = useState<{ label: string; eventType?: string }>(CATEGORIES[0]);
+  const [activeCategory, setActiveCategory] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<Event[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const loadEvents = useCallback(async (refresh = false) => {
-    try {
-      if (refresh) setIsRefreshing(true);
-      else setIsLoading(true);
+  const loadEvents = useCallback(
+    async (refresh = false) => {
+      try {
+        if (refresh) setIsRefreshing(true);
+        else setIsLoading(true);
 
-      const featuredResponse = await eventsService.getFeaturedEvents({ limit: 5 }).catch(() => null);
-      if (featuredResponse?.data) setFeaturedEvents(featuredResponse.data);
+        const featuredResponse = await eventsService.getFeaturedEvents({ limit: 5 }).catch(() => null);
+        if (featuredResponse?.data) setFeaturedEvents(featuredResponse.data);
 
-      const params: any = { page: 1, limit: 20, status: 'published' };
-      if (activeCategory.eventType) params.eventType = activeCategory.eventType;
-      if (searchQuery.trim()) params.search = searchQuery.trim();
+        const params: any = { page: 1, limit: 20, status: 'published' };
+        if (activeCategory) params.eventType = activeCategory;
+        if (searchQuery.trim()) params.search = searchQuery.trim();
 
-      const response = await eventsService.getEvents(params).catch(() => null);
-      if (response?.data) setEvents(response.data);
-    } catch (error: any) {
-      console.error('Failed to load events:', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [activeCategory, searchQuery]);
+        const response = await eventsService.getEvents(params).catch(() => null);
+        if (response?.data) setEvents(response.data);
+      } catch (error: any) {
+        console.error('Failed to load events:', error);
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [activeCategory, searchQuery]
+  );
 
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
 
-  const handleSearch = (text: string) => {
-    setSearchQuery(text);
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Text style={styles.logoText}>plat</Text>
-        <View style={styles.locationContainer}>
-          <MapPin size={16} color={COLORS.accent} />
-          <Text style={styles.locationText}>Nairobi, Kenya</Text>
+        <View style={styles.headerLeft}>
+          <View style={styles.logoIcon}>
+            <Text style={styles.logoIconText}>P</Text>
+          </View>
+          <Text style={styles.logoText}>Plat</Text>
         </View>
+        <TouchableOpacity style={styles.notificationButton}>
+          <Bell size={22} color={COLORS.accent} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.locationRow}>
+        <Text style={styles.locationLabel}>CURRENT LOCATION</Text>
+      </View>
+      <View style={styles.locationSelector}>
+        <MapPin size={18} color={COLORS.textPrimary} />
+        <Text style={styles.locationText}>Nairobi, Kenya</Text>
       </View>
 
       <View style={styles.searchContainer}>
@@ -192,23 +229,25 @@ export function HomeScreen() {
             placeholder="Search events..."
             placeholderTextColor={COLORS.textLight}
             value={searchQuery}
-            onChangeText={handleSearch}
+            onChangeText={setSearchQuery}
             onSubmitEditing={() => loadEvents()}
           />
         </View>
         <TouchableOpacity style={styles.filterButton} onPress={() => loadEvents()}>
-          <Filter size={20} color={COLORS.primary} />
+          <Filter size={20} color={COLORS.white} />
         </TouchableOpacity>
       </View>
 
-      <View>
+      <View style={styles.categoriesSection}>
+        <Text style={styles.sectionLabel}>Categories</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesList}>
           {CATEGORIES.map((cat) => (
             <CategoryChip
               key={cat.label}
               label={cat.label}
-              active={activeCategory.label === cat.label}
-              onPress={() => setActiveCategory(cat)}
+              active={activeCategory === cat.value}
+              onPress={() => setActiveCategory(cat.value)}
+              Icon={cat.icon}
             />
           ))}
         </ScrollView>
@@ -216,19 +255,20 @@ export function HomeScreen() {
 
       {featuredEvents.length > 0 && (
         <View style={styles.featuredSection}>
-          <Text style={styles.sectionTitle}>Featured</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Trending Events</Text>
+            <TouchableOpacity onPress={() => loadEvents()}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredList}>
-            {featuredEvents.map((event) => (
-              <TouchableOpacity
+            {featuredEvents.map((event, idx) => (
+              <EventCard
                 key={event.id}
-                style={styles.featuredCard}
+                event={event}
                 onPress={() => navigation.navigate('EventDetail', { eventId: event.id, event })}
-              >
-                <Image source={{ uri: (event.images?.[1] ?? event.images?.[0]) || 'https://via.placeholder.com/200' }} style={styles.featuredImage} />
-                <View style={styles.featuredContent}>
-                  <Text style={styles.featuredTitle} numberOfLines={1}>{event.title}</Text>
-                </View>
-              </TouchableOpacity>
+                showFeatured={idx === 0}
+              />
             ))}
           </ScrollView>
         </View>
@@ -250,7 +290,13 @@ export function HomeScreen() {
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadEvents(true)} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => loadEvents(true)}
+              tintColor={COLORS.accent}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No events found.</Text>
@@ -264,38 +310,144 @@ export function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: SPACING.m, paddingVertical: SPACING.s },
-  logoText: { fontSize: 28, fontWeight: '800', fontStyle: 'italic', color: COLORS.primary },
-  locationContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.surface, padding: 6, borderRadius: 16 },
-  locationText: { fontSize: 12, fontWeight: '600', color: COLORS.textPrimary },
-  searchContainer: { flexDirection: 'row', paddingHorizontal: SPACING.m, gap: SPACING.s, marginBottom: SPACING.m },
-  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, paddingHorizontal: SPACING.m, height: 48, borderRadius: 24, gap: SPACING.s },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  logoIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.primary[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoIconText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+  logoText: { fontSize: 22, fontWeight: '700', color: COLORS.textPrimary },
+  notificationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locationRow: { paddingHorizontal: SPACING.md, marginTop: SPACING.xs },
+  locationLabel: { fontSize: 10, color: COLORS.textLight, letterSpacing: 1, marginBottom: 4 },
+  locationSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: SPACING.md,
+  },
+  locationText: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary },
+  searchContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.md,
+    gap: SPACING.sm,
+    marginVertical: SPACING.md,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.md,
+    height: 48,
+    borderRadius: borderRadius.xl,
+    gap: SPACING.sm,
+  },
   searchInput: { flex: 1, fontSize: 16, color: COLORS.textPrimary },
-  filterButton: { width: 48, height: 48, backgroundColor: COLORS.surface, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
-  categoriesList: { paddingHorizontal: SPACING.m, paddingBottom: SPACING.m, gap: SPACING.s },
-  chip: { paddingHorizontal: SPACING.m, paddingVertical: 8, borderRadius: 20, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: 'transparent' },
-  chipActive: { backgroundColor: COLORS.primary },
-  chipText: { color: COLORS.textPrimary, fontWeight: '500' },
+  filterButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: theme.colors.primary[500],
+    borderRadius: borderRadius.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  categoriesSection: { marginBottom: SPACING.md },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginLeft: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  categoriesList: { paddingHorizontal: SPACING.md, gap: SPACING.sm, paddingRight: SPACING.md },
+  chip: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
+    borderRadius: borderRadius.xl,
+    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  chipActive: { backgroundColor: theme.colors.primary[500] },
+  chipText: { color: COLORS.textSecondary, fontWeight: '600', fontSize: 14 },
   chipTextActive: { color: COLORS.white },
-  listContent: { paddingHorizontal: SPACING.m, paddingBottom: 80 },
-  card: { flexDirection: 'row', backgroundColor: COLORS.white, marginBottom: SPACING.m, borderBottomWidth: 1, borderBottomColor: COLORS.surface, paddingBottom: SPACING.m },
-  imageContainer: { width: 120, height: 140, position: 'relative' },
-  cardImage: { width: '100%', height: '100%', borderRadius: 12, backgroundColor: COLORS.surface },
-  badge: { position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  cardContent: { flex: 1, marginLeft: SPACING.m, justifyContent: 'space-between', paddingVertical: 4 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.textPrimary },
-  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  featuredSection: { marginBottom: SPACING.lg },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+  seeAllText: { fontSize: 14, fontWeight: '600', color: theme.colors.primary[400] },
+  featuredList: { paddingHorizontal: SPACING.md, gap: SPACING.md, paddingRight: SPACING.md },
+  listContent: { paddingHorizontal: SPACING.md, paddingBottom: 100 },
+  card: {
+    backgroundColor: COLORS.surface,
+    marginBottom: SPACING.md,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+  },
+  cardImageWrapper: { height: 180, position: 'relative' },
+  cardImage: { width: '100%', height: '100%', backgroundColor: COLORS.surfaceVariant },
+  cardImagePlaceholder: { justifyContent: 'center', alignItems: 'center' },
+  featuredBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    backgroundColor: theme.colors.primary[500],
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+  },
+  featuredBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
+  dateBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: theme.colors.primary[500],
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: borderRadius.sm,
+  },
+  dateBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
+  cardContent: { padding: SPACING.md },
+  cardTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 8 },
+  cardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   cardMetaText: { fontSize: 13, color: COLORS.textSecondary },
-  cardFooter: { marginTop: 4 },
-  cardPrice: { fontSize: 16, fontWeight: 'bold', color: COLORS.primary },
-  sourceText: { fontSize: 11, color: COLORS.textLight, fontStyle: 'italic', marginTop: 2 },
-  featuredSection: { marginBottom: SPACING.m },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginLeft: SPACING.m, marginBottom: SPACING.s },
-  featuredList: { paddingHorizontal: SPACING.m },
-  featuredCard: { marginRight: SPACING.m, width: 200 },
-  featuredImage: { width: 200, height: 120, borderRadius: 12, marginBottom: 4 },
-  featuredContent: {},
-  featuredTitle: { fontWeight: 'bold' },
+  cardFooter: { marginTop: 12 },
+  bookButton: {
+    alignSelf: 'flex-end',
+    backgroundColor: COLORS.surfaceVariant,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: borderRadius.md,
+  },
+  bookButtonText: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', height: 200 },
   emptyContainer: { alignItems: 'center', marginTop: 40 },
   emptyText: { color: COLORS.textSecondary },

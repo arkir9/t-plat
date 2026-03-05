@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
-import { Home, MapPin, Ticket, Heart, User } from 'lucide-react-native';
+import { Home, MapPin, Ticket, Heart, User, Compass } from 'lucide-react-native';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import MapScreen from '../screens/map/MapScreen';
 import { TicketsScreen } from '../screens/tickets/TicketsScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { FavoritesScreen } from '../screens/profile/FavoritesScreen';
+import { theme } from '../design/theme';
+
+const { colors } = theme;
 
 const COLORS = {
-  primary: '#000000',
-  textLight: '#999999',
-  white: '#FFFFFF',
-  surface: '#F5F5F5',
+  background: colors.dark.background,
+  accent: colors.primary[500],
+  text: colors.dark.text,
+  textSecondary: colors.dark.textSecondary,
 };
 
 type TabName = 'Home' | 'Map' | 'Tickets' | 'Favorites' | 'Profile';
@@ -21,9 +24,9 @@ export const MainTabNavigator = () => {
 
   const tabs: { name: TabName; label: string; icon: typeof Home }[] = [
     { name: 'Home', label: 'Home', icon: Home },
-    { name: 'Map', label: 'Map', icon: MapPin },
+    { name: 'Map', label: 'Map', icon: Compass },
     { name: 'Tickets', label: 'Tickets', icon: Ticket },
-    { name: 'Favorites', label: 'Favorites', icon: Heart },
+    { name: 'Favorites', label: 'Saved', icon: Heart },
     { name: 'Profile', label: 'Profile', icon: User },
   ];
 
@@ -58,14 +61,11 @@ export const MainTabNavigator = () => {
               onPress={() => setActiveTab(tab.name)}
               activeOpacity={0.7}
             >
-              <Icon
-                size={24}
-                color={isActive ? COLORS.primary : COLORS.textLight}
-              />
+              <Icon size={24} color={isActive ? COLORS.accent : COLORS.textSecondary} />
               <Text
                 style={[
                   styles.tabLabel,
-                  { color: isActive ? COLORS.primary : COLORS.textLight },
+                  { color: isActive ? COLORS.accent : COLORS.textSecondary },
                 ]}
               >
                 {tab.label}
@@ -81,17 +81,17 @@ export const MainTabNavigator = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: COLORS.background,
   },
   screenContainer: {
     flex: 1,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.background,
     borderTopWidth: 1,
-    borderTopColor: COLORS.surface,
-    height: 60,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    height: 64,
     paddingBottom: 8,
     paddingTop: 8,
   },
@@ -103,5 +103,6 @@ const styles = StyleSheet.create({
   tabLabel: {
     fontSize: 10,
     marginTop: 4,
+    fontWeight: '600',
   },
 });

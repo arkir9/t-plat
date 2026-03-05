@@ -6,7 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
-import { OrganizerProfile } from '../../organizers/entities/organizer-profile.entity';
+import type { OrganizerProfile } from '../../organizers/entities/organizer-profile.entity';
 
 @Entity('users')
 export class User {
@@ -39,6 +39,9 @@ export class User {
 
   @Column({ type: 'boolean', default: true, name: 'is_active' })
   isActive: boolean;
+
+  @Column({ type: 'varchar', length: 20, default: 'user' })
+  role: 'user' | 'organizer' | 'admin';
 
   @Column({ type: 'varchar', length: 255, unique: true, nullable: true, name: 'google_id' })
   googleId: string | null;

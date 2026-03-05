@@ -8,11 +8,11 @@ import {
   UpdateDateColumn,
   Index,
 } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
-import { Event } from '../../events/entities/event.entity';
-import { Order } from './order.entity';
-import { TicketType } from './ticket-type.entity';
-import { OrganizerProfile } from '../../organizers/entities/organizer-profile.entity';
+import type { User } from '../../users/entities/user.entity';
+import type { Event } from '../../events/entities/event.entity';
+import type { Order } from './order.entity';
+import type { TicketType } from './ticket-type.entity';
+import type { OrganizerProfile } from '../../organizers/entities/organizer-profile.entity';
 
 export enum TicketStatus {
   ACTIVE = 'active',

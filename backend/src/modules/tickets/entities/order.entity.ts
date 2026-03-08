@@ -16,6 +16,7 @@ import type { Ticket } from './ticket.entity';
 
 export enum PaymentStatus {
   PENDING = 'pending',
+  PROCESSING = 'processing',
   COMPLETED = 'completed',
   FAILED = 'failed',
   REFUNDED = 'refunded',
@@ -109,6 +110,15 @@ export class Order {
 
   @Column({ type: 'varchar', length: 50, nullable: true, name: 'mpesa_transaction_code' })
   mpesaTransactionCode: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true, name: 'mpesa_checkout_request_id' })
+  mpesaCheckoutRequestId: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true, name: 'mpesa_merchant_request_id' })
+  mpesaMerchantRequestId: string;
+
+  @Column({ type: 'text', nullable: true, name: 'payment_failure_reason' })
+  paymentFailureReason: string;
 
   @Column({ type: 'timestamp', nullable: true, name: 'payment_date' })
   paymentDate: Date;

@@ -8,7 +8,7 @@ export interface EventQueryParams {
   limit?: number;
   search?: string;
   category?: string;
-  eventType?: string; // Important for new filters
+  eventType?: string;
   startDate?: string;
   endDate?: string;
   minPrice?: number;
@@ -16,6 +16,9 @@ export interface EventQueryParams {
   latitude?: number;
   longitude?: number;
   radius?: number;
+  tonight?: boolean; // ← NEW: filter to events starting today
+  upcoming?: boolean;
+  featured?: boolean;
 }
 
 function normalizeListResponse<T>(res: any): { data: T[]; total: number; page: number; limit: number } {
@@ -35,7 +38,13 @@ export const eventsService = {
     return normalizeListResponse<Event>(response.data);
   },
 
-  async getRecommendedEvents(limit: number = 10) {
+  /** Tonight filter — hits the dedicated /events/tonight endpoint */
+  async getTonightEvents(params?: Omit<EventQueryParams, 'tonight'>) {
+    const response = await api.get('/events/tonight', { params });
+    return normalizeListResponse<Event>(response.data);
+  },
+
+  async getRecommendedEvents(limit = 10) {
     const response = await api.get('/events/recommended/me', { params: { limit } });
     return normalizeListResponse<Event>(response.data);
   },
@@ -45,11 +54,8 @@ export const eventsService = {
     return normalizeListResponse<Event>(response.data);
   },
 
-  async getNearbyEvents(latitude: number, longitude: number, radius: number = 25) {
-    // Increased radius default to 25km to cover cities better
-    const response = await api.get('/events/nearby', {
-      params: { latitude, longitude, radius },
-    });
+  async getNearbyEvents(latitude: number, longitude: number, radius = 25) {
+    const response = await api.get('/events/nearby', { params: { latitude, longitude, radius } });
     return normalizeListResponse<Event>(response.data);
   },
 

@@ -7,6 +7,7 @@ import { firstValueFrom } from 'rxjs';
 import { Event, EventSource, EventStatus, LocationType, EventType } from '../entities/event.entity';
 import { UniversalScraperService } from './universal-scraper.service';
 import { TicketsasaScraperService } from './ticketsasa-scraper.service';
+import { OrganiserOutreachService } from './organiser-outreach.service';
 
 @Injectable()
 export class EventIngestionService implements OnApplicationBootstrap {
@@ -28,6 +29,7 @@ export class EventIngestionService implements OnApplicationBootstrap {
     private configService: ConfigService,
     private universalScraper: UniversalScraperService,
     private ticketsasaScraper: TicketsasaScraperService,
+    private outreachService: OrganiserOutreachService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -202,8 +204,11 @@ export class EventIngestionService implements OnApplicationBootstrap {
       });
 
       try {
-        await this.eventRepository.save(newEvent);
+        const savedEvent = await this.eventRepository.save(newEvent);
         this.logger.log(`   + Saved [${raw.sourceDomain}]: ${newEvent.title}`);
+        await this.outreachService.handleNewScrapedEvent(savedEvent, raw).catch((err) =>
+          this.logger.warn(`   Outreach for ${newEvent.title}: ${err?.message || err}`),
+        );
       } catch (e: any) {
         this.logger.error(`   - Failed [${raw.sourceDomain}]: ${raw.title}`);
       }
@@ -319,7 +324,10 @@ export class EventIngestionService implements OnApplicationBootstrap {
     });
 
     try {
-      await this.eventRepository.save(newEvent);
+      const savedEvent = await this.eventRepository.save(newEvent);
+      await this.outreachService.handleNewScrapedEvent(savedEvent, extData).catch((err) =>
+        this.logger.warn(`Outreach for ${extData.title}: ${err?.message || err}`),
+      );
     } catch (e) {
       this.logger.error(`Failed to save ${extData.title}`);
     }

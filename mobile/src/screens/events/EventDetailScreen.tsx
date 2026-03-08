@@ -23,6 +23,7 @@ import {
   AlertCircle,
   Navigation,
   Info,
+  MessageSquare,
 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { SocialShareModal } from '../../components/SocialShareModal';
@@ -261,6 +262,14 @@ export function EventDetailScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
 
+          <TouchableOpacity
+            style={styles.reviewsButton}
+            onPress={() => navigation.navigate('EventReviews', { eventId, event })}
+          >
+            <MessageSquare size={20} color={COLORS.accent} />
+            <Text style={styles.reviewsButtonText}>Reviews</Text>
+          </TouchableOpacity>
+
           <Text style={styles.sectionHeader}>ABOUT THIS EVENT</Text>
           <View style={styles.descriptionBlock}>
             {(event.description || 'No description available.')
@@ -478,6 +487,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   followBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.white },
+  reviewsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    paddingHorizontal: SPACING.md,
+  },
+  reviewsButtonText: { fontSize: 15, fontWeight: '600', color: COLORS.accent },
   sectionHeader: {
     fontSize: 18,
     fontWeight: '700',

@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Dimensions,
-  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -18,11 +17,12 @@ import {
   Ticket,
   Share2,
   Download,
-  ShieldCheck,
+  RefreshCcw,
 } from 'lucide-react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { format } from 'date-fns';
+import { format, isPast } from 'date-fns';
 import { ticketsService } from '../../services/ticketsService';
+import { ShareCardSheet } from '../../components/ShareCardSheet';
 import { theme } from '../../design/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -39,19 +39,21 @@ const COLORS = {
   white: '#FFFFFF',
   success: colors.success,
   warning: colors.warning,
+  red: '#FF4D6A',
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  active: { bg: 'rgba(16,185,129,0.15)', text: COLORS.success },
-  used: { bg: 'rgba(255,255,255,0.1)', text: COLORS.textSecondary },
-  cancelled: { bg: 'rgba(239,68,68,0.15)', text: colors.error },
-  refunded: { bg: 'rgba(245,158,11,0.15)', text: COLORS.warning },
+  active:    { bg: 'rgba(16,185,129,0.15)',  text: COLORS.success },
+  used:      { bg: 'rgba(255,255,255,0.1)',   text: COLORS.textSecondary },
+  cancelled: { bg: 'rgba(239,68,68,0.15)',    text: colors.error },
+  refunded:  { bg: 'rgba(245,158,11,0.15)',   text: COLORS.warning },
 };
 
 export function TicketDetailScreen({ route, navigation }: any) {
   const { ticketId, ticket: passedTicket } = route.params || {};
   const [ticket, setTicket] = useState<any>(passedTicket || null);
   const [loading, setLoading] = useState(!passedTicket);
+  const [shareVisible, setShareVisible] = useState(false);
 
   useEffect(() => {
     if (!passedTicket && ticketId) {
@@ -62,15 +64,6 @@ export function TicketDetailScreen({ route, navigation }: any) {
         .finally(() => setLoading(false));
     }
   }, [ticketId, passedTicket]);
-
-  const handleShare = async () => {
-    const event = ticket?.event || {};
-    try {
-      await Share.share({
-        message: `Check out my ticket for ${event.title || 'an event'} on T-Plat!`,
-      });
-    } catch {}
-  };
 
   if (loading) {
     return (
@@ -97,116 +90,155 @@ export function TicketDetailScreen({ route, navigation }: any) {
   const status = ticket.status || 'active';
   const statusStyle = STATUS_COLORS[status] || STATUS_COLORS.active;
 
-  const heroImage =
-    event.bannerImageUrl || event.images?.[0] || 'https://via.placeholder.com/400x200';
-  const eventDate = event.startDate
-    ? format(new Date(event.startDate), 'EEEE, MMMM d, yyyy')
-    : 'Date TBD';
-  const eventTime = event.startDate ? format(new Date(event.startDate), 'h:mm a') : '';
-  const location = event.customLocation?.city
-    ? `${event.customLocation.address || ''}, ${event.customLocation.city}`
-    : event.venue?.name || 'Location TBD';
+  const heroImage = event.bannerImageUrl || event.images?.[0];
 
-  const qrValue = ticket.qrCode || JSON.stringify({ t: ticket.id, e: event.id });
-  const ticketIdShort = ticket.id?.slice(-8)?.toUpperCase() || '--------';
+  // Show refund button: ticket must be active AND event must not have started yet
+  const eventStarted = event.startDate ? isPast(new Date(event.startDate)) : false;
+  const canRefund = status === 'active' && !eventStarted;
+
+  const handleRefund = () => {
+    navigation.navigate('RefundRequest', { ticketId: ticket.id, ticket });
+  };
+
+  const handleDownload = () => {
+    // TODO: trigger offline PDF/pass download
+    // ticketsService.downloadTicket(ticket.id)
+  };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
-        {/* Hero Image */}
-        <View style={styles.heroContainer}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <ChevronLeft color={COLORS.text} size={24} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Ticket</Text>
+        <TouchableOpacity
+          onPress={() => setShareVisible(true)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Share2 color={COLORS.text} size={22} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Hero */}
+        {heroImage ? (
           <Image source={{ uri: heroImage }} style={styles.heroImage} />
-          <View style={styles.heroOverlay} />
-          <TouchableOpacity style={styles.backArrow} onPress={() => navigation.goBack()}>
-            <ChevronLeft size={24} color={COLORS.white} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.shareArrow} onPress={handleShare}>
-            <Share2 size={20} color={COLORS.white} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Event Info */}
-        <View style={styles.eventSection}>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-              <Text style={[styles.statusText, { color: statusStyle.text }]}>
-                {status.toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.ticketTypeName}>{ticketType.name || 'General Admission'}</Text>
+        ) : (
+          <View style={styles.heroPlaceholder}>
+            <Ticket size={40} color={COLORS.textSecondary} />
           </View>
+        )}
 
-          <Text style={styles.eventTitle}>{event.title || 'Event'}</Text>
-
-          <View style={styles.metaRow}>
-            <Calendar size={16} color={COLORS.accent} />
-            <Text style={styles.metaText}>
-              {eventDate}
-              {eventTime ? ` • ${eventTime}` : ''}
+        {/* Status badge */}
+        <View style={styles.statusRow}>
+          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+            <Text style={[styles.statusText, { color: statusStyle.text }]}>
+              {status.charAt(0).toUpperCase() + status.slice(1)}
             </Text>
-          </View>
-          <View style={styles.metaRow}>
-            <MapPin size={16} color={COLORS.accent} />
-            <Text style={styles.metaText}>{location}</Text>
           </View>
         </View>
 
         {/* QR Code */}
-        <View style={styles.qrSection}>
-          <View style={styles.dashedDivider} />
-          <Text style={styles.qrLabel}>SCAN FOR ENTRY</Text>
-          <View style={styles.qrCard}>
+        <View style={styles.qrContainer}>
+          {ticket.qrCode ? (
             <QRCode
-              value={qrValue}
-              size={SCREEN_WIDTH * 0.5}
+              value={ticket.qrCode}
+              size={SCREEN_WIDTH * 0.55}
+              color={COLORS.background}
               backgroundColor={COLORS.white}
-              color="#000000"
             />
-          </View>
-          <Text style={styles.ticketIdLabel}>TICKET ID</Text>
-          <Text style={styles.ticketIdValue}>{ticketIdShort}</Text>
-
-          <View style={styles.verifiedRow}>
-            <ShieldCheck size={14} color={COLORS.success} />
-            <Text style={styles.verifiedText}>Cryptographically verified</Text>
-          </View>
-        </View>
-
-        {/* Ticket Details */}
-        <View style={styles.detailsSection}>
-          <Text style={styles.sectionTitle}>Ticket Details</Text>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Type</Text>
-            <Text style={styles.detailValue}>{ticketType.name || 'General'}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Price</Text>
-            <Text style={styles.detailValue}>
-              {ticketType.currency || 'KES'} {Number(ticketType.price || 0).toLocaleString()}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Order</Text>
-            <Text style={styles.detailValue}>{ticket.order?.orderNumber || '—'}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Purchased</Text>
-            <Text style={styles.detailValue}>
-              {ticket.createdAt ? format(new Date(ticket.createdAt), 'MMM d, yyyy') : '—'}
-            </Text>
-          </View>
-          {ticket.checkedInAt && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Checked In</Text>
-              <Text style={styles.detailValue}>
-                {format(new Date(ticket.checkedInAt), 'MMM d, yyyy h:mm a')}
-              </Text>
+          ) : (
+            <View style={styles.qrPlaceholder}>
+              <Text style={styles.qrPlaceholderText}>QR code unavailable</Text>
             </View>
+          )}
+          {ticket.ticketNumber && (
+            <Text style={styles.ticketNumber}>#{ticket.ticketNumber}</Text>
           )}
         </View>
 
+        {/* Event Info */}
+        <View style={styles.infoCard}>
+          <Text style={styles.eventTitle}>{event.title || 'Event'}</Text>
+
+          {event.startDate && (
+            <View style={styles.infoRow}>
+              <Calendar size={16} color={COLORS.textSecondary} />
+              <Text style={styles.infoText}>
+                {format(new Date(event.startDate), 'EEE, MMM d yyyy · h:mm a')}
+              </Text>
+            </View>
+          )}
+
+          {(event.location?.name || event.location?.address || typeof event.location === 'string') && (
+            <View style={styles.infoRow}>
+              <MapPin size={16} color={COLORS.textSecondary} />
+              <Text style={styles.infoText}>
+                {typeof event.location === 'string'
+                  ? event.location
+                  : event.location?.name || event.location?.address}
+              </Text>
+            </View>
+          )}
+
+          {ticketType.name && (
+            <View style={styles.infoRow}>
+              <Ticket size={16} color={COLORS.textSecondary} />
+              <Text style={styles.infoText}>{ticketType.name}</Text>
+            </View>
+          )}
+
+          {ticket.orderNumber && (
+            <Text style={styles.orderNumber}>Order #{ticket.orderNumber}</Text>
+          )}
+        </View>
+
+        {/* ── Actions ─────────────────────────────────────────── */}
+        <View style={styles.actions}>
+          {/* Download */}
+          <TouchableOpacity style={styles.actionBtn} onPress={handleDownload} activeOpacity={0.8}>
+            <Download size={18} color={COLORS.text} />
+            <Text style={styles.actionBtnText}>Download</Text>
+          </TouchableOpacity>
+
+          {/* Share */}
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => setShareVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Share2 size={18} color={COLORS.text} />
+            <Text style={styles.actionBtnText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Request Refund ──────────────────────────────────── */}
+        {canRefund && (
+          <TouchableOpacity style={styles.refundBtn} onPress={handleRefund} activeOpacity={0.8}>
+            <RefreshCcw size={15} color={COLORS.red} />
+            <Text style={styles.refundBtnText}>Request Refund</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Valid notice */}
+        <Text style={styles.validNote}>
+          This ticket is valid for one entry. Present QR code at the door.
+        </Text>
+
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Share card sheet */}
+      <ShareCardSheet
+        visible={shareVisible}
+        onClose={() => setShareVisible(false)}
+        event={event}
+      />
     </SafeAreaView>
   );
 }
@@ -214,128 +246,88 @@ export function TicketDetailScreen({ route, navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   center: { justifyContent: 'center', alignItems: 'center' },
-  errorText: { color: COLORS.textSecondary, fontSize: 16, marginTop: 12 },
-  backBtn: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    backgroundColor: COLORS.accent,
-    borderRadius: 10,
-  },
-  backBtnText: { color: COLORS.white, fontWeight: '600' },
 
-  heroContainer: { width: '100%', height: 220, position: 'relative' },
-  heroImage: { width: '100%', height: '100%' },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
   },
-  backArrow: {
-    position: 'absolute',
-    top: 12,
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shareArrow: {
-    position: 'absolute',
-    top: 12,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  headerTitle: { fontSize: 17, fontWeight: '700', color: COLORS.text },
+
+  heroImage: { width: '100%', height: 200, resizeMode: 'cover' },
+  heroPlaceholder: {
+    width: '100%', height: 160,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  eventSection: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 },
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 10,
-  },
-  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  ticketTypeName: { fontSize: 13, fontWeight: '600', color: COLORS.accent },
-  eventTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.text,
-    marginBottom: 12,
-    lineHeight: 30,
-  },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  metaText: { fontSize: 14, color: COLORS.textSecondary, flex: 1 },
+  statusRow: { paddingHorizontal: 20, paddingTop: 16, alignItems: 'flex-start' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  statusText: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
 
-  qrSection: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: 20 },
-  dashedDivider: {
-    width: '100%',
-    height: 1,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: COLORS.surfaceVariant,
-    marginBottom: 20,
-  },
-  qrLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-    letterSpacing: 1.5,
-    marginBottom: 16,
-  },
-  qrCard: {
-    backgroundColor: COLORS.white,
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 16,
-  },
-  ticketIdLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  ticketIdValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: 2,
-    fontVariant: ['tabular-nums'],
-  },
-  verifiedRow: {
-    flexDirection: 'row',
+  qrContainer: {
     alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-  },
-  verifiedText: { fontSize: 12, color: COLORS.success, fontWeight: '500' },
-
-  detailsSection: {
+    paddingVertical: 28,
     marginHorizontal: 20,
+    marginTop: 16,
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  qrPlaceholder: {
+    width: SCREEN_WIDTH * 0.55, height: SCREEN_WIDTH * 0.55,
+    backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center', borderRadius: 8,
+  },
+  qrPlaceholderText: { color: '#999', fontSize: 13 },
+  ticketNumber: { marginTop: 12, fontSize: 13, color: '#999', letterSpacing: 1 },
+
+  infoCard: {
+    margin: 20, padding: 16,
     backgroundColor: COLORS.surface,
     borderRadius: 16,
-    padding: 20,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 16,
-  },
-  detailRow: {
+  eventTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text, marginBottom: 14 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  infoText: { fontSize: 14, color: COLORS.textSecondary, flex: 1 },
+  orderNumber: { marginTop: 8, fontSize: 12, color: COLORS.textSecondary, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', paddingTop: 10 },
+
+  actions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.surfaceVariant,
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
   },
-  detailLabel: { fontSize: 14, color: COLORS.textSecondary },
-  detailValue: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+  actionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    paddingVertical: 13,
+    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  actionBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.text },
+
+  // Refund button — subtle, destructive-adjacent
+  refundBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 20, marginBottom: 16,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1.5, borderColor: 'rgba(255,77,106,0.35)',
+    backgroundColor: 'rgba(255,77,106,0.06)',
+  },
+  refundBtnText: { fontSize: 14, fontWeight: '700', color: COLORS.red },
+
+  validNote: {
+    textAlign: 'center', fontSize: 12, color: COLORS.textSecondary,
+    marginHorizontal: 32, lineHeight: 18,
+  },
+
+  errorText: { fontSize: 16, color: COLORS.textSecondary, marginTop: 16 },
+  backBtn: { marginTop: 20, paddingVertical: 12, paddingHorizontal: 24, backgroundColor: COLORS.surface, borderRadius: 12 },
+  backBtnText: { fontSize: 14, color: COLORS.text, fontWeight: '600' },
 });

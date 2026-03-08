@@ -34,6 +34,7 @@ import { SafetyModule } from './modules/safety/safety.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './health/health.module';
+import { ScraperModule } from './modules/Scraper.module';
 
 @Module({
   imports: [
@@ -112,6 +113,7 @@ import { HealthModule } from './health/health.module';
     FavoritesModule,
     AdminModule,
     HealthModule,
+    ScraperModule,
   ],
   providers: [
     {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
-import { ChevronLeft, CreditCard, Smartphone, ShieldCheck } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ChevronLeft, CreditCard, Smartphone, ShieldCheck, CheckCircle } from 'lucide-react-native';
 import { ticketsService } from '../../services/ticketsService';
 import { paymentsService } from '../../services/paymentsService';
 import { useAuthStore } from '../../store/authStore';
@@ -31,6 +32,9 @@ const COLORS = {
 const PLATFORM_FEE_PERCENT = 5;
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 120_000;
+
+// Key used across app for the saved M-Pesa number
+const MPESA_NUMBER_KEY = '@tplat_mpesa_number';
 
 type PaymentMode = 'mpesa' | 'stripe';
 
@@ -57,9 +61,28 @@ export function CheckoutScreen({ navigation, route }: any) {
 
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('mpesa');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [savedNumber, setSavedNumber] = useState<string | null>(null); // the stored number, if any
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Load saved M-Pesa number on mount ──────────────────────────────────────
+  useEffect(() => {
+    AsyncStorage.getItem(MPESA_NUMBER_KEY)
+      .then((stored) => {
+        if (stored) {
+          setSavedNumber(stored);
+          setPhoneNumber(stored); // pre-fill the field
+        }
+      })
+      .catch(() => {}); // non-blocking
+  }, []);
+
+  // ── Save M-Pesa number after a successful payment ─────────────────────────
+  const saveMpesaNumber = useCallback((number: string) => {
+    AsyncStorage.setItem(MPESA_NUMBER_KEY, number).catch(() => {});
+    setSavedNumber(number);
+  }, []);
 
   const cleanup = useCallback(() => {
     if (pollTimerRef.current) {
@@ -75,7 +98,7 @@ export function CheckoutScreen({ navigation, route }: any) {
         setLoading(false);
         Alert.alert(
           'Payment Pending',
-          'We haven\'t received confirmation yet. Check your M-Pesa messages and try verifying from your tickets.',
+          "We haven't received confirmation yet. Check your M-Pesa messages and try verifying from your tickets.",
           [
             { text: 'Go to Tickets', onPress: () => navigation.navigate('MainTabs', { screen: 'Tickets' }) },
             { text: 'OK' },
@@ -135,6 +158,9 @@ export function CheckoutScreen({ navigation, route }: any) {
 
       const payment = await paymentsService.createMpesaPayment(order.id, fullPhone);
 
+      // ── Save the number NOW (before polling, so it's always stored on attempt) ──
+      saveMpesaNumber(phoneNumber);
+
       setLoadingMessage('Waiting for M-Pesa confirmation...');
       pollPaymentStatus(payment.paymentId, order.id, Date.now());
     } catch (error: any) {
@@ -161,12 +187,7 @@ export function CheckoutScreen({ navigation, route }: any) {
 
       setLoading(false);
       // TODO: Present Stripe PaymentSheet using payment.clientSecret
-      // once @stripe/stripe-react-native is installed.
-      Alert.alert(
-        'Card Payment',
-        'Card payment integration is coming soon. Please use M-Pesa for now.',
-        [{ text: 'OK' }],
-      );
+      Alert.alert('Card Payment', 'Card payment integration is coming soon. Please use M-Pesa for now.', [{ text: 'OK' }]);
     } catch (error: any) {
       setLoading(false);
       const msg = error.response?.data?.message || error.message || 'Payment failed. Please try again.';
@@ -222,8 +243,8 @@ export function CheckoutScreen({ navigation, route }: any) {
       <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Event Info */}
         {event && (
-          <View style={styles.eventInfo}>
-            <Text style={styles.eventTitle} numberOfLines={2}>{event.title}</Text>
+          <View style={styles.eventCard}>
+            <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
             {event.startDate && (
               <Text style={styles.eventDate}>
                 {format(new Date(event.startDate), 'EEE, MMM d · h:mm a')}
@@ -235,35 +256,23 @@ export function CheckoutScreen({ navigation, route }: any) {
         {/* Order Summary */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Order Summary</Text>
-          <View style={styles.card}>
-            {items.map((item) => (
-              <View key={item.ticketTypeId} style={styles.lineItem}>
-                <Text style={styles.lineItemName}>
-                  {item.quantity}× {item.ticketTypeName}
-                </Text>
-                <Text style={styles.lineItemPrice}>
-                  KES {(item.unitPrice * item.quantity).toLocaleString()}
-                </Text>
-              </View>
-            ))}
-
-            <View style={styles.divider} />
-
-            <View style={styles.lineItem}>
-              <Text style={styles.subtotalLabel}>Subtotal</Text>
-              <Text style={styles.subtotalValue}>KES {subtotal.toLocaleString()}</Text>
+          {items.map((item) => (
+            <View key={item.ticketTypeId} style={styles.lineItem}>
+              <Text style={styles.lineItemName}>
+                {item.ticketTypeName} × {item.quantity}
+              </Text>
+              <Text style={styles.lineItemPrice}>
+                KES {(item.unitPrice * item.quantity).toLocaleString()}
+              </Text>
             </View>
-            <View style={styles.lineItem}>
-              <Text style={styles.feeLabel}>Service fee ({PLATFORM_FEE_PERCENT}%)</Text>
-              <Text style={styles.feeValue}>KES {platformFee.toLocaleString()}</Text>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.lineItem}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>KES {total.toLocaleString()}</Text>
-            </View>
+          ))}
+          <View style={[styles.lineItem, styles.feeRow]}>
+            <Text style={styles.feeLabel}>Platform fee (5%)</Text>
+            <Text style={styles.feeValue}>KES {platformFee.toLocaleString()}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>KES {total.toLocaleString()}</Text>
           </View>
         </View>
 
@@ -308,7 +317,17 @@ export function CheckoutScreen({ navigation, route }: any) {
           {/* M-Pesa Phone Input */}
           {paymentMode === 'mpesa' && (
             <View style={styles.phoneInputContainer}>
-              <Text style={styles.phoneLabel}>M-Pesa Phone Number</Text>
+              <View style={styles.phoneLabelRow}>
+                <Text style={styles.phoneLabel}>M-Pesa Phone Number</Text>
+                {/* Saved number indicator */}
+                {savedNumber && savedNumber === phoneNumber && (
+                  <View style={styles.savedBadge}>
+                    <CheckCircle size={11} color={COLORS.green} />
+                    <Text style={styles.savedBadgeText}>Saved</Text>
+                  </View>
+                )}
+              </View>
+
               <View style={styles.phoneRow}>
                 <View style={styles.prefixBox}>
                   <Text style={styles.prefixText}>+254</Text>
@@ -323,6 +342,19 @@ export function CheckoutScreen({ navigation, route }: any) {
                   onChangeText={(text) => setPhoneNumber(text.replace(/\D/g, '').slice(0, 9))}
                 />
               </View>
+
+              {/* Quick-restore chip — shown only when saved ≠ current input */}
+              {savedNumber && savedNumber !== phoneNumber && (
+                <TouchableOpacity
+                  style={styles.restoreChip}
+                  onPress={() => setPhoneNumber(savedNumber)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.restoreChipText}>
+                    Use saved number: +254{savedNumber}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
@@ -330,20 +362,16 @@ export function CheckoutScreen({ navigation, route }: any) {
         {/* Security Note */}
         <View style={styles.securityNote}>
           <ShieldCheck color={COLORS.green} size={16} />
-          <Text style={styles.securityText}>
-            Your payment is secured and encrypted
-          </Text>
+          <Text style={styles.securityText}>Your payment is secured and encrypted</Text>
         </View>
 
-        <View style={{ height: 32 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Footer */}
+      {/* Pay Button */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.payBtn} onPress={handlePay} activeOpacity={0.85}>
-          <Text style={styles.payBtnText}>
-            Pay KES {total.toLocaleString()}
-          </Text>
+          <Text style={styles.payBtnText}>Pay KES {total.toLocaleString()}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -353,100 +381,77 @@ export function CheckoutScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.white },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: COLORS.border,
   },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  scrollContent: { flex: 1, paddingHorizontal: 16 },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
+  scrollContent: { flex: 1 },
 
-  eventInfo: { paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  eventTitle: { fontSize: 20, fontWeight: '700', marginBottom: 4 },
-  eventDate: { fontSize: 14, color: COLORS.textSecondary },
+  eventCard: {
+    margin: 16, padding: 14, backgroundColor: COLORS.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: COLORS.border,
+  },
+  eventTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  eventDate: { fontSize: 13, color: COLORS.textSecondary },
 
-  section: { marginTop: 24 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, color: COLORS.textSecondary, marginBottom: 12 },
+  section: { marginHorizontal: 16, marginTop: 20 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, color: '#444', marginBottom: 12 },
 
-  card: { backgroundColor: COLORS.surface, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: COLORS.border },
-  lineItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  lineItemName: { fontSize: 15, color: '#333', flex: 1 },
-  lineItemPrice: { fontSize: 15, fontWeight: '600', color: '#333' },
-  divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 10 },
-  subtotalLabel: { fontSize: 14, color: COLORS.textSecondary },
-  subtotalValue: { fontSize: 14, color: COLORS.textSecondary },
-  feeLabel: { fontSize: 14, color: COLORS.textSecondary },
-  feeValue: { fontSize: 14, color: COLORS.textSecondary },
+  lineItem: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  lineItemName: { fontSize: 14, color: '#333' },
+  lineItemPrice: { fontSize: 14, fontWeight: '600' },
+  feeRow: { marginTop: 4, paddingTop: 8, borderTopWidth: 1, borderTopColor: COLORS.border },
+  feeLabel: { fontSize: 13, color: COLORS.textSecondary },
+  feeValue: { fontSize: 13, color: COLORS.textSecondary },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1.5, borderTopColor: '#ddd' },
   totalLabel: { fontSize: 16, fontWeight: '700' },
-  totalValue: { fontSize: 16, fontWeight: '700' },
+  totalValue: { fontSize: 18, fontWeight: '800', color: COLORS.accent },
 
   payOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    marginBottom: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, borderRadius: 12, borderWidth: 1.5, borderColor: COLORS.border,
+    marginBottom: 10, backgroundColor: COLORS.white,
   },
   payOptionActive: { borderColor: COLORS.accent, backgroundColor: COLORS.accentLight },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#CCC',
-    marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#ccc', alignItems: 'center', justifyContent: 'center' },
   radioActive: { borderColor: COLORS.accent },
   radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.accent },
-  payOptionText: { marginLeft: 8, flex: 1 },
-  payOptionTitle: { fontSize: 15, fontWeight: '600', color: '#333' },
-  payOptionTitleActive: { color: COLORS.primary },
+  payOptionText: { flex: 1 },
+  payOptionTitle: { fontSize: 14, fontWeight: '600', color: '#333' },
+  payOptionTitleActive: { color: COLORS.accent },
   payOptionDesc: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
-  phoneInputContainer: { marginTop: 8 },
-  phoneLabel: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 8 },
-  phoneRow: { flexDirection: 'row', alignItems: 'center' },
+  phoneInputContainer: { marginTop: 12 },
+  phoneLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  phoneLabel: { fontSize: 13, fontWeight: '600', color: '#333' },
+  savedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,185,129,0.1)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  savedBadgeText: { fontSize: 11, color: COLORS.green, fontWeight: '600' },
+  phoneRow: { flexDirection: 'row' },
   prefixBox: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderTopLeftRadius: 10,
-    borderBottomLeftRadius: 10,
-    paddingHorizontal: 14,
-    height: 50,
-    justifyContent: 'center',
+    backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border,
+    borderTopLeftRadius: 10, borderBottomLeftRadius: 10,
+    paddingHorizontal: 14, height: 50, justifyContent: 'center',
   },
   prefixText: { fontSize: 16, fontWeight: '600', color: '#444' },
   phoneInput: {
-    flex: 1,
-    height: 50,
-    borderWidth: 1,
-    borderLeftWidth: 0,
-    borderColor: COLORS.accent,
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    backgroundColor: COLORS.white,
+    flex: 1, height: 50, borderWidth: 1, borderLeftWidth: 0,
+    borderColor: COLORS.accent, borderTopRightRadius: 10, borderBottomRightRadius: 10,
+    paddingHorizontal: 14, fontSize: 16, backgroundColor: COLORS.white,
   },
+  restoreChip: {
+    marginTop: 8, alignSelf: 'flex-start',
+    paddingHorizontal: 12, paddingVertical: 6,
+    backgroundColor: COLORS.accentLight, borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(139,92,246,0.3)',
+  },
+  restoreChipText: { fontSize: 12, color: COLORS.accent, fontWeight: '600' },
 
-  securityNote: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 8 },
+  securityNote: { flexDirection: 'row', alignItems: 'center', marginTop: 20, marginHorizontal: 16, gap: 8 },
   securityText: { fontSize: 13, color: COLORS.green },
 
   footer: { padding: 16, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
-  payBtn: {
-    backgroundColor: COLORS.accent,
-    paddingVertical: 16,
-    borderRadius: 30,
-    alignItems: 'center',
-  },
+  payBtn: { backgroundColor: COLORS.accent, paddingVertical: 16, borderRadius: 30, alignItems: 'center' },
   payBtnText: { color: COLORS.white, fontSize: 17, fontWeight: '700' },
 
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: COLORS.white },

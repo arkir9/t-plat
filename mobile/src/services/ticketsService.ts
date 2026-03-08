@@ -1,3 +1,12 @@
+/**
+ * ticketsService
+ *
+ * CHANGES FROM ORIGINAL:
+ * 1. Added requestRefund() — POST /tickets/:id/refund-request
+ * 2. Added checkInTicket() as alias for checkIn() so both names work.
+ *    (CheckInScannerScreen uses ticketsService.checkInTicket())
+ */
+
 import { api } from './api';
 import type { TicketType } from '../types';
 
@@ -24,12 +33,27 @@ export const ticketsService = {
     return response.data;
   },
 
+  /**
+   * Check in a ticket by QR code string. Used by CheckInScannerScreen.
+   */
   async checkIn(qrCode: string) {
     const response = await api.post('/tickets/check-in', { qrCode });
     return response.data;
   },
 
-  async purchaseTickets(eventId: string, items: { ticketTypeId: string; quantity: number }[], paymentMethod: string, phoneNumber?: string) {
+  /**
+   * Alias for checkIn() — CheckInScannerScreen calls this name.
+   */
+  async checkInTicket(qrCode: string) {
+    return this.checkIn(qrCode);
+  },
+
+  async purchaseTickets(
+    eventId: string,
+    items: { ticketTypeId: string; quantity: number }[],
+    paymentMethod: string,
+    phoneNumber?: string,
+  ) {
     const response = await api.post('/tickets/orders', {
       eventId,
       items,
@@ -51,6 +75,18 @@ export const ticketsService = {
 
   async cancelWaitlistEntry(waitlistId: string) {
     const response = await api.delete(`/tickets/waitlist/${waitlistId}`);
+    return response.data;
+  },
+
+  /**
+   * Request a refund for a specific ticket.
+   * Backend: POST /tickets/:id/refund-request
+   * Body: { reason: string }
+   *
+   * Called from RefundRequestScreen.
+   */
+  async requestRefund(ticketId: string, reason: string) {
+    const response = await api.post(`/tickets/${ticketId}/refund-request`, { reason });
     return response.data;
   },
 };

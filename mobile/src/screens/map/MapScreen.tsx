@@ -1,542 +1,439 @@
-import React, { useState, useRef, useEffect } from 'react';
+/**
+ * MapScreen.tsx — full replacement with supercluster clustering
+ *
+ * Dep to add: npm install supercluster @types/supercluster
+ * (supercluster is a pure-JS library, no native linking needed)
+ *
+ * Clustering behaviour:
+ *  - Markers cluster when zoom is low (latDelta > ~0.05)
+ *  - Tap a cluster → map zooms in to expand it
+ *  - Tap an individual marker → bottom sheet preview
+ *  - "Tonight" filter chip wired to getTonightEvents()
+ */
+
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  Image,
-  Dimensions,
-  Animated,
-  Platform,
-  ActivityIndicator,
-  FlatList,
-  TextInput,
-  Alert,
+  StyleSheet, View, Text, TouchableOpacity, Image,
+  Dimensions, Animated, Platform, ActivityIndicator,
+  FlatList, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { List, MapPin, Navigation, X, Search, Filter } from 'lucide-react-native';
+import { List, MapPin, Navigation, X, Search } from 'lucide-react-native';
 import * as Location from 'expo-location';
+import Supercluster from 'supercluster';
 import { eventsService, Event } from '../../services/eventsService';
 import { format } from 'date-fns';
 import { theme } from '../../design/theme';
 
-let MapView: any = null;
-let Marker: any = null;
-let Callout: any = null;
-let PROVIDER_GOOGLE: any = null;
-
+let MapView: any = null, Marker: any = null, Callout: any = null, PROVIDER_GOOGLE: any = null;
 if (Platform.OS !== 'web') {
   try {
     const Maps = require('react-native-maps');
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-    Callout = Maps.Callout;
-    PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
-  } catch (e) {
-    console.warn('react-native-maps not available:', e);
-  }
+    MapView = Maps.default; Marker = Maps.Marker;
+    Callout = Maps.Callout; PROVIDER_GOOGLE = Maps.PROVIDER_GOOGLE;
+  } catch {}
 }
 
 const { width, height } = Dimensions.get('window');
 const { colors } = theme;
 
 const COLORS = {
-  background: colors.dark.background,
-  surface: colors.dark.surface,
-  surfaceVariant: colors.dark.surfaceVariant,
-  accent: colors.primary[500],
-  text: colors.dark.text,
-  textSecondary: colors.dark.textSecondary,
-  white: '#FFFFFF',
+  background: colors.dark.background, surface: colors.dark.surface,
+  surfaceVariant: colors.dark.surfaceVariant, accent: colors.primary[500],
+  text: colors.dark.text, textSecondary: colors.dark.textSecondary,
+  white: '#FFFFFF', amber: '#F5A623', green: '#1FC98E',
 };
 
-const DEFAULT_LOCATION = {
-  latitude: -1.2921,
-  longitude: 36.8219,
-  latitudeDelta: 0.1,
-  longitudeDelta: 0.1,
-};
-
-const MAP_CATEGORIES = [
-  { label: 'All Events', value: 'all' },
+const DEFAULT_REGION = { latitude: -4.0435, longitude: 39.6682, latitudeDelta: 0.15, longitudeDelta: 0.15 };
+const CATEGORIES = [
+  { label: 'All', value: 'all' },
+  { label: '🌙 Tonight', value: 'tonight' },
   { label: 'Music', value: 'music' },
-  { label: 'Workshops', value: 'workshops' },
   { label: 'Food', value: 'food' },
+  { label: 'Sports', value: 'sports' },
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getCoord(event: Event): { latitude: number; longitude: number } | null {
+  const loc = (event as any).location;
+  if (loc?.latitude && loc?.longitude) return { latitude: +loc.latitude, longitude: +loc.longitude };
+  if ((event as any).latitude && (event as any).longitude)
+    return { latitude: +(event as any).latitude, longitude: +(event as any).longitude };
+  return null;
+}
+
+function getPriceDisplay(event: Event): string {
+  const types = (event as any).ticketTypes ?? [];
+  if (!types.length) return '';
+  const min = Math.min(...types.map((t: any) => t.price ?? 0));
+  return min === 0 ? 'Free' : `KES ${min.toLocaleString()}`;
+}
+
+// ── Supercluster setup ────────────────────────────────────────────────────────
+const clusterIndex = new Supercluster({ radius: 60, maxZoom: 16 });
+
+function regionToBox(region: any) {
+  return [
+    region.longitude - region.longitudeDelta / 2,
+    region.latitude - region.latitudeDelta / 2,
+    region.longitude + region.longitudeDelta / 2,
+    region.latitude + region.latitudeDelta / 2,
+  ] as [number, number, number, number];
+}
+
+function regionToZoom(region: any): number {
+  // Approximate zoom level from latitudeDelta
+  return Math.round(Math.log(360 / region.longitudeDelta) / Math.LN2);
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function MapScreen() {
   const navigation = useNavigation<any>();
   const mapRef = useRef<any>(null);
-  const [events, setEvents] = useState<Event[]>([]);
+
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [region, setRegion] = useState(DEFAULT_REGION);
+  const [clusters, setClusters] = useState<any[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [initialRegion, setInitialRegion] = useState(DEFAULT_LOCATION);
   const [showListView, setShowListView] = useState(false);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const slideAnim = useRef(new Animated.Value(height)).current;
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const coords = await requestLocationPermission();
-      if (cancelled) return;
-      const lat = coords?.latitude ?? DEFAULT_LOCATION.latitude;
-      const lng = coords?.longitude ?? DEFAULT_LOCATION.longitude;
-      await loadNearbyEvents(lat, lng);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const requestLocationPermission = async (): Promise<{ latitude: number; longitude: number } | null> => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setInitialRegion(DEFAULT_LOCATION);
-        Alert.alert(
-          'Location permission needed',
-          'We could not access your location. Showing events near Nairobi instead.'
-        );
-        return null;
-      }
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const newRegion = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      };
-      setInitialRegion(newRegion);
-      return { latitude: location.coords.latitude, longitude: location.coords.longitude };
-    } catch (error) {
-      console.error('Failed to get current location:', error);
-      Alert.alert(
-        'Location unavailable',
-        'Your current location could not be determined in time. Showing events near Nairobi instead.'
-      );
-      setInitialRegion(DEFAULT_LOCATION);
-      return null;
-    }
-  };
-
-  const loadNearbyEvents = async (lat: number, lng: number) => {
+  // ── Load events ─────────────────────────────────────────────────────────────
+  const loadEvents = useCallback(async (filter: string, search: string) => {
     setIsLoading(true);
     try {
-      const response = await eventsService.getNearbyEvents(lat, lng, 50).catch(() => null);
-      const list = response?.data ?? [];
-      if (Array.isArray(list)) setEvents(list);
-    } catch (error) {
-      console.error('Failed to load events:', error);
+      let res;
+      if (filter === 'tonight') {
+        res = await eventsService.getTonightEvents({ limit: 100 }).catch(() => null);
+      } else {
+        const params: any = { limit: 100, status: 'published' };
+        if (filter !== 'all') params.eventType = filter;
+        if (search.trim()) params.search = search.trim();
+        res = await eventsService.getEvents(params).catch(() => null);
+      }
+      const events = res?.data ?? [];
+      setAllEvents(events);
+
+      // Feed events with coords into supercluster
+      const points = events
+        .map((e) => {
+          const coord = getCoord(e);
+          if (!coord) return null;
+          return {
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [coord.longitude, coord.latitude] },
+            properties: { eventId: e.id, event: e },
+          };
+        })
+        .filter(Boolean) as Supercluster.PointFeature<{ eventId: string; event: Event }>[];
+
+      clusterIndex.load(points);
+      updateClusters(region, points.length);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []); // eslint-disable-line
 
-  const getPriceDisplay = (event: Event): string => {
-    if (event.ticketTypes?.length) {
-      const min = Math.min(...event.ticketTypes.map((t: any) => Number(t.price)));
-      if (min > 0) return event.ticketTypes.length > 1 ? `From KES ${min.toLocaleString()}` : `KES ${min.toLocaleString()}`;
-    }
-    if (event.price != null && event.price > 0) return `KES ${event.price.toLocaleString()}`;
-    return 'Free';
-  };
+  useEffect(() => { loadEvents(activeFilter, searchQuery); }, [activeFilter]);
 
-  const getEventCoordinate = (event: Event): { latitude: number; longitude: number } | null => {
-    if (event.customLocation?.latitude && event.customLocation?.longitude) {
-      return {
-        latitude: Number(event.customLocation.latitude),
-        longitude: Number(event.customLocation.longitude),
-      };
-    }
-    if (event.venue?.venueLatitude && event.venue?.venueLongitude) {
-      return {
-        latitude: Number(event.venue.venueLatitude),
-        longitude: Number(event.venue.venueLongitude),
-      };
-    }
-    return null;
-  };
+  // ── Re-cluster on region change ─────────────────────────────────────────────
+  const updateClusters = useCallback((r: typeof DEFAULT_REGION, _count?: number) => {
+    const zoom = regionToZoom(r);
+    const box = regionToBox(r);
+    const c = clusterIndex.getClusters(box, zoom);
+    setClusters(c);
+  }, []);
 
-  const eventsWithCoords = events.filter((e) => getEventCoordinate(e) !== null);
+  const onRegionChangeComplete = useCallback((r: any) => {
+    setRegion(r);
+    updateClusters(r);
+  }, [updateClusters]);
 
-  const onMarkerPress = (event: Event) => {
+  // ── Get user location ───────────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const newRegion = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.12,
+          longitudeDelta: 0.12,
+        };
+        setRegion(newRegion);
+        mapRef.current?.animateToRegion(newRegion, 600);
+      }
+    })();
+  }, []);
+
+  // ── Bottom sheet animation ──────────────────────────────────────────────────
+  const showSheet = (event: Event) => {
     setSelectedEvent(event);
-    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, friction: 8 }).start();
+    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 60, friction: 9 }).start();
   };
 
-  const closeSheet = () => {
-    Animated.timing(slideAnim, { toValue: height, duration: 300, useNativeDriver: true }).start(() =>
-      setSelectedEvent(null)
+  const hideSheet = () => {
+    Animated.timing(slideAnim, { toValue: height, useNativeDriver: true, duration: 200 }).start(() =>
+      setSelectedEvent(null),
     );
   };
 
+  // ── Cluster tap: zoom in ────────────────────────────────────────────────────
+  const onClusterPress = (cluster: any) => {
+    const [lng, lat] = cluster.geometry.coordinates;
+    const expansionZoom = Math.min(clusterIndex.getClusterExpansionZoom(cluster.id), 18);
+    const newDelta = 360 / Math.pow(2, expansionZoom);
+    mapRef.current?.animateToRegion(
+      { latitude: lat, longitude: lng, latitudeDelta: newDelta, longitudeDelta: newDelta },
+      400,
+    );
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  const eventsWithCoords = useMemo(() => allEvents.filter((e) => getCoord(e)), [allEvents]);
+
   return (
-    <View style={styles.container}>
-      <SafeAreaView style={styles.safeTop} edges={['top']} />
-      <View style={styles.header}>
-        <View style={styles.logoIcon}>
-          <Text style={styles.logoIconText}>P</Text>
+    <SafeAreaView style={styles.container}>
+      {/* Top bar */}
+      <View style={styles.topBar}>
+        <View style={styles.logoBox}>
+          <Text style={styles.logoText}>p</Text>
         </View>
         <View style={styles.searchBar}>
-          <Search size={20} color={COLORS.textSecondary} />
+          <Search size={14} color={COLORS.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Explore activities..."
+            placeholder="Search events on map…"
             placeholderTextColor={COLORS.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            onSubmitEditing={() => loadEvents(activeFilter, searchQuery)}
           />
-          <TouchableOpacity>
-            <Filter size={20} color={COLORS.accent} />
-          </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={() => setShowListView((v) => !v)} style={styles.listToggle}>
+          <List size={20} color={COLORS.white} />
+        </TouchableOpacity>
       </View>
 
+      {/* Category chips */}
       <View style={styles.filterRow}>
-        {MAP_CATEGORIES.map((cat) => (
+        {CATEGORIES.map((cat) => (
           <TouchableOpacity
             key={cat.value}
-            style={[styles.filterChip, activeFilter === cat.value && styles.filterChipActive]}
+            style={[
+              styles.filterChip,
+              activeFilter === cat.value && styles.filterChipActive,
+              cat.value === 'tonight' && activeFilter !== 'tonight' && styles.filterChipTonight,
+            ]}
             onPress={() => setActiveFilter(cat.value)}
           >
-            <Text style={[styles.filterText, activeFilter === cat.value && styles.filterTextActive]}>
+            <Text
+              style={[
+                styles.filterText,
+                activeFilter === cat.value && styles.filterTextActive,
+                cat.value === 'tonight' && activeFilter !== 'tonight' && { color: COLORS.amber },
+              ]}
+            >
               {cat.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {Platform.OS === 'web' || !MapView ? (
+      {/* Map / List toggle */}
+      {showListView ? (
+        <FlatList
+          data={allEvents}
+          keyExtractor={(e) => e.id}
+          contentContainerStyle={{ padding: 16, gap: 12 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.listCard}
+              onPress={() => navigation.navigate('EventDetail', { eventId: item.id, event: item })}
+            >
+              <Image
+                source={{ uri: (item as any).bannerImageUrl || item.images?.[0] || 'https://via.placeholder.com/100' }}
+                style={styles.listCardImage}
+              />
+              <View style={styles.listCardInfo}>
+                <Text style={styles.listCardTitle} numberOfLines={2}>{item.title}</Text>
+                {item.startDate && (
+                  <Text style={styles.listCardMeta}>{format(new Date(item.startDate), 'EEE d MMM · h:mm a')}</Text>
+                )}
+                <Text style={styles.listCardPrice}>{getPriceDisplay(item)}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            isLoading ? <ActivityIndicator color={COLORS.accent} style={{ marginTop: 40 }} /> : null
+          }
+        />
+      ) : Platform.OS === 'web' || !MapView ? (
         <View style={[styles.map, styles.mapPlaceholder]}>
-          <Text style={styles.mapPlaceholderText}>Map View</Text>
-          <Text style={styles.mapPlaceholderSubtext}>Not available on web</Text>
+          <Text style={styles.mapPlaceholderText}>Map not available on web</Text>
         </View>
       ) : (
         <MapView
           ref={mapRef}
           provider={PROVIDER_GOOGLE}
           style={styles.map}
-          initialRegion={initialRegion}
-          showsUserLocation={true}
+          initialRegion={region}
+          showsUserLocation
           showsMyLocationButton={false}
+          onRegionChangeComplete={onRegionChangeComplete}
         >
-          {eventsWithCoords.map((event) => {
-            const coordinate = getEventCoordinate(event)!;
+          {clusters.map((cluster, index) => {
+            const [lng, lat] = cluster.geometry.coordinates;
+            const isCluster = cluster.properties.cluster;
+
+            if (isCluster) {
+              const count = cluster.properties.point_count;
+              const size = Math.min(20 + count * 3, 58); // scale with count
+              return (
+                <Marker
+                  key={`cluster-${cluster.id ?? index}`}
+                  coordinate={{ latitude: lat, longitude: lng }}
+                  onPress={() => onClusterPress(cluster)}
+                >
+                  <View style={[styles.clusterMarker, { width: size, height: size, borderRadius: size / 2 }]}>
+                    <Text style={styles.clusterCount}>{count}</Text>
+                  </View>
+                </Marker>
+              );
+            }
+
+            const event: Event = cluster.properties.event;
             return (
               <Marker
-                key={event.id}
-                coordinate={coordinate}
-                onPress={() => onMarkerPress(event)}
+                key={`event-${cluster.properties.eventId}`}
+                coordinate={{ latitude: lat, longitude: lng }}
+                onPress={() => showSheet(event)}
               >
                 <View style={styles.markerContainer}>
                   <View style={styles.markerInner}>
-                    <MapPin size={24} color={COLORS.white} />
+                    <MapPin size={18} color={COLORS.white} />
                   </View>
+                  <View style={styles.markerTail} />
                 </View>
-                {Callout && (
-                  <Callout tooltip onPress={() => navigation.navigate('EventDetail', { eventId: event.id, event })}>
-                    <View style={styles.calloutContainer}>
-                      <Image
-                        source={{ uri: event.images?.[0] || 'https://via.placeholder.com/100' }}
-                        style={styles.calloutImage}
-                      />
-                      <View style={styles.calloutTextContainer}>
-                        <Text style={styles.calloutTitle} numberOfLines={1}>
-                          {event.title}
-                        </Text>
-                        <Text style={styles.calloutPrice}>{getPriceDisplay(event)}</Text>
-                      </View>
-                    </View>
-                  </Callout>
-                )}
               </Marker>
             );
           })}
         </MapView>
       )}
 
-      <View style={styles.activitiesSection}>
-        <View style={styles.activitiesHeader}>
-          <Text style={styles.activitiesTitle}>Activities Near You</Text>
-          <TouchableOpacity onPress={() => setShowListView((v) => !v)}>
-            <Text style={styles.listViewToggle}>LIST VIEW</Text>
-          </TouchableOpacity>
-        </View>
-        <FlatList
-          horizontal
-          data={events.slice(0, 10)}
-          keyExtractor={(item) => item.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.activitiesList}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.activityCard}
-              onPress={() => navigation.navigate('EventDetail', { eventId: item.id, event: item })}
-            >
-              <View style={styles.activityImageWrapper}>
-                <Image
-                  source={{ uri: item.images?.[0] || 'https://via.placeholder.com/200' }}
-                  style={styles.activityImage}
-                />
-                <View style={styles.todayBadge}>
-                  <Text style={styles.todayBadgeText}>TODAY</Text>
-                </View>
-              </View>
-              <Text style={styles.activityTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <View style={styles.activityMeta}>
-                <Text style={styles.activityMetaText}>0.5 mi</Text>
-                <Text style={styles.activityMetaText}>
-                  {item.startDate ? format(new Date(item.startDate), 'h:mm a') : '--'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.getTicketsBtn}
-                onPress={() => navigation.navigate('EventDetail', { eventId: item.id, event: item })}
-              >
-                <Text style={styles.getTicketsText}>GET TICKETS</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
+      {/* My location FAB */}
+      {!showListView && (
+        <TouchableOpacity
+          style={styles.locationFab}
+          onPress={async () => {
+            const loc = await Location.getCurrentPositionAsync({}).catch(() => null);
+            if (loc) {
+              const r = { latitude: loc.coords.latitude, longitude: loc.coords.longitude, latitudeDelta: 0.08, longitudeDelta: 0.08 };
+              mapRef.current?.animateToRegion(r, 500);
+            }
+          }}
+        >
+          <Navigation size={20} color={COLORS.white} />
+        </TouchableOpacity>
+      )}
 
-      <TouchableOpacity
-        style={styles.locationButton}
-        onPress={async () => {
-          try {
-            const loc = await Location.getCurrentPositionAsync({
-              accuracy: Location.Accuracy.Balanced,
-            });
-            const region = {
-              latitude: loc.coords.latitude,
-              longitude: loc.coords.longitude,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            };
-            mapRef.current?.animateToRegion(region);
-            loadNearbyEvents(loc.coords.latitude, loc.coords.longitude);
-          } catch (error) {
-            console.error('Failed to recenter on current location:', error);
-            Alert.alert(
-              'Location timeout',
-              'We could not get your current location in time. Showing events near Nairobi instead.'
-            );
-            mapRef.current?.animateToRegion(DEFAULT_LOCATION);
-            loadNearbyEvents(DEFAULT_LOCATION.latitude, DEFAULT_LOCATION.longitude);
-          }
-        }}
-      >
-        <Navigation size={24} color={COLORS.white} />
-      </TouchableOpacity>
-
+      {/* Bottom sheet preview */}
       {selectedEvent && (
-        <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
-          <View style={styles.dragHandle} />
-          <View style={styles.previewContent}>
+        <Animated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
+          <View style={styles.sheetHandle} />
+          <TouchableOpacity style={styles.sheetClose} onPress={hideSheet}>
+            <X size={18} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+          <View style={styles.sheetContent}>
             <Image
-              source={{ uri: selectedEvent.images?.[0] || 'https://via.placeholder.com/150' }}
-              style={styles.previewImage}
+              source={{ uri: (selectedEvent as any).bannerImageUrl || selectedEvent.images?.[0] || 'https://via.placeholder.com/120' }}
+              style={styles.sheetImage}
             />
-            <View style={styles.previewInfo}>
-              <Text style={styles.previewTitle} numberOfLines={1}>
-                {selectedEvent.title}
-              </Text>
-              <Text style={styles.previewMeta}>
-                {format(new Date(selectedEvent.startDate), 'MMM d • h:mm a')}
-              </Text>
-              <Text style={styles.previewMeta}>
-                {selectedEvent.customLocation?.address || selectedEvent.venue?.name || 'Location TBD'}
-              </Text>
-              <View style={styles.previewFooter}>
-                <Text style={styles.previewPrice}>{getPriceDisplay(selectedEvent)}</Text>
-                <TouchableOpacity
-                  style={styles.viewDetailsBtn}
-                  onPress={() =>
-                    navigation.navigate('EventDetail', { eventId: selectedEvent.id, event: selectedEvent })
-                  }
-                >
-                  <Text style={styles.viewDetailsText}>View</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.sheetInfo}>
+              <Text style={styles.sheetTitle} numberOfLines={2}>{selectedEvent.title}</Text>
+              {selectedEvent.startDate && (
+                <Text style={styles.sheetMeta}>{format(new Date(selectedEvent.startDate), 'EEE d MMM · h:mm a')}</Text>
+              )}
+              <Text style={styles.sheetPrice}>{getPriceDisplay(selectedEvent)}</Text>
+              <TouchableOpacity
+                style={styles.sheetBtn}
+                onPress={() => { hideSheet(); navigation.navigate('EventDetail', { eventId: selectedEvent.id, event: selectedEvent }); }}
+              >
+                <Text style={styles.sheetBtnText}>View Details</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={closeSheet}>
-              <X size={24} color={COLORS.text} />
-            </TouchableOpacity>
           </View>
         </Animated.View>
       )}
-    </View>
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator color={COLORS.accent} size="large" />
+        </View>
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  safeTop: { backgroundColor: COLORS.background },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 12,
-  },
-  logoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoIconText: { fontSize: 18, fontWeight: '700', color: COLORS.white },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 14,
-    height: 44,
-    borderRadius: 22,
-    gap: 10,
-  },
-  searchInput: { flex: 1, fontSize: 15, color: COLORS.text },
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 10,
-  },
-  filterChip: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
+
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  logoBox: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
+  logoText: { fontSize: 16, fontWeight: '800', color: COLORS.white, fontStyle: 'italic' },
+  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, paddingHorizontal: 12, height: 40, borderRadius: 20, gap: 8 },
+  searchInput: { flex: 1, fontSize: 14, color: COLORS.text },
+  listToggle: { width: 36, height: 36, backgroundColor: COLORS.surface, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+
+  filterRow: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: COLORS.surface },
   filterChipActive: { backgroundColor: COLORS.accent },
-  filterText: { color: COLORS.textSecondary, fontWeight: '600', fontSize: 14 },
+  filterChipTonight: { borderWidth: 1.5, borderColor: COLORS.amber, backgroundColor: 'rgba(245,166,35,0.08)' },
+  filterText: { fontSize: 13, fontWeight: '600', color: COLORS.textSecondary },
   filterTextActive: { color: COLORS.white },
-  map: { width: '100%', flex: 1 },
-  mapPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceVariant,
-  },
-  mapPlaceholderText: { color: COLORS.text, fontSize: 18, fontWeight: 'bold' },
-  mapPlaceholderSubtext: { color: COLORS.textSecondary, marginTop: 8 },
-  markerContainer: { alignItems: 'center', justifyContent: 'center' },
-  markerInner: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: COLORS.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  calloutContainer: {
-    width: 180,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 8,
-  },
-  calloutImage: { width: '100%', height: 90, borderRadius: 8, marginBottom: 8, backgroundColor: COLORS.surfaceVariant },
-  calloutTextContainer: { paddingHorizontal: 4 },
-  calloutTitle: { fontWeight: 'bold', fontSize: 13, color: COLORS.text, marginBottom: 2 },
-  calloutPrice: { fontSize: 12, color: COLORS.accent, fontWeight: '600' },
-  activitiesSection: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 16,
-    maxHeight: 260,
-  },
-  activitiesHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  activitiesTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
-  listViewToggle: { fontSize: 12, fontWeight: '700', color: COLORS.accent },
-  activitiesList: { paddingHorizontal: 16, paddingBottom: 24, gap: 16 },
-  activityCard: {
-    width: 200,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  activityImageWrapper: { height: 100, position: 'relative' },
-  activityImage: { width: '100%', height: '100%', backgroundColor: COLORS.surfaceVariant },
-  todayBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: COLORS.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  todayBadgeText: { fontSize: 10, fontWeight: '700', color: COLORS.white },
-  activityTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text, marginTop: 10, paddingHorizontal: 12 },
-  activityMeta: { flexDirection: 'row', gap: 12, paddingHorizontal: 12, marginTop: 4 },
-  activityMetaText: { fontSize: 12, color: COLORS.textSecondary },
-  getTicketsBtn: {
-    margin: 12,
-    backgroundColor: COLORS.accent,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  getTicketsText: { fontSize: 14, fontWeight: '700', color: COLORS.white },
-  locationButton: {
-    position: 'absolute',
-    bottom: 280,
-    right: 16,
-    backgroundColor: COLORS.surface,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    width: '100%',
-    height: 220,
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  dragHandle: {
-    width: 40,
-    height: 5,
-    backgroundColor: COLORS.textSecondary,
-    borderRadius: 10,
-    alignSelf: 'center',
-    marginTop: 10,
-  },
-  previewContent: { flexDirection: 'row', padding: 20, gap: 16 },
-  previewImage: { width: 100, height: 120, borderRadius: 12, backgroundColor: COLORS.surfaceVariant },
-  previewInfo: { flex: 1, justifyContent: 'center' },
-  previewTitle: { fontWeight: 'bold', fontSize: 18, marginBottom: 4, color: COLORS.text },
-  previewMeta: { color: COLORS.textSecondary, fontSize: 13, marginBottom: 2 },
-  previewPrice: { fontWeight: 'bold', fontSize: 16, color: COLORS.text },
-  previewFooter: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10, alignItems: 'center' },
-  viewDetailsBtn: {
-    backgroundColor: COLORS.accent,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  viewDetailsText: { color: COLORS.white, fontWeight: 'bold' },
-  closeBtn: { position: 'absolute', top: 10, right: 10 },
+
+  map: { flex: 1 },
+  mapPlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.surfaceVariant },
+  mapPlaceholderText: { color: COLORS.text, fontSize: 16 },
+
+  // Cluster marker
+  clusterMarker: { backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
+  clusterCount: { color: COLORS.white, fontSize: 12, fontWeight: '800' },
+
+  // Individual marker
+  markerContainer: { alignItems: 'center' },
+  markerInner: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.white },
+  markerTail: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.accent, marginTop: -2 },
+
+  locationFab: { position: 'absolute', bottom: 200, right: 16, width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
+
+  // Bottom sheet
+  sheet: { position: 'absolute', bottom: 0, width: '100%', backgroundColor: COLORS.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 32 },
+  sheetHandle: { width: 36, height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, alignSelf: 'center', marginTop: 10 },
+  sheetClose: { position: 'absolute', top: 14, right: 16 },
+  sheetContent: { flexDirection: 'row', padding: 20, gap: 14, marginTop: 6 },
+  sheetImage: { width: 100, height: 110, borderRadius: 12 },
+  sheetInfo: { flex: 1, justifyContent: 'center' },
+  sheetTitle: { fontSize: 16, fontWeight: '800', color: COLORS.text, marginBottom: 4 },
+  sheetMeta: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
+  sheetPrice: { fontSize: 13, fontWeight: '700', color: COLORS.green, marginBottom: 10 },
+  sheetBtn: { alignSelf: 'flex-start', backgroundColor: COLORS.accent, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20 },
+  sheetBtnText: { color: COLORS.white, fontSize: 13, fontWeight: '700' },
+
+  // List view
+  listCard: { flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: 14, overflow: 'hidden', gap: 0 },
+  listCardImage: { width: 90, height: 90 },
+  listCardInfo: { flex: 1, padding: 12, justifyContent: 'center' },
+  listCardTitle: { fontSize: 14, fontWeight: '700', color: COLORS.text, marginBottom: 4 },
+  listCardMeta: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 4 },
+  listCardPrice: { fontSize: 13, fontWeight: '700', color: COLORS.green },
+
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(7,7,15,0.5)', justifyContent: 'center', alignItems: 'center' },
 });

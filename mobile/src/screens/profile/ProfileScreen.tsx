@@ -19,24 +19,36 @@ import {
   Star,
   Briefcase,
   ShieldCheck,
+  User,
+  CreditCard,
 } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../services/authService';
 import { organizersService, ApplicationStatus } from '../../services/organizersService';
+import { favoritesService } from '../../services/favoritesService';
+import { ticketsService } from '../../services/ticketsService';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
 import { theme } from '../../design/theme';
 
-const { colors } = theme;
+// v2 design tokens
 const COLORS = {
-  accent: colors.primary[500],
-  background: colors.dark.background,
-  surface: colors.dark.surface,
-  textPrimary: colors.dark.text,
-  textSecondary: colors.dark.textSecondary,
+  bg: '#07070F',
+  surface: '#10101E',
+  card: '#14142A',
+  border: 'rgba(255,255,255,0.07)',
+  accent: '#7B5CFA',
+  accent2: '#B06EFF',
+  text: '#EFEFF8',
+  muted: '#55547A',
+  dim: '#9090B8',
+  green: '#1FC98E',
+  amber: '#F5A623',
+  red: '#FF4D6A',
+  background: '#07070F',
+  textPrimary: '#EFEFF8',
+  textSecondary: '#9090B8',
   white: '#FFFFFF',
-  green: colors.success,
-  amber: '#F59E0B',
 };
 
 const STATUS_LABELS: Record<ApplicationStatus, string> = {
@@ -55,14 +67,16 @@ const STATUS_COLORS: Record<ApplicationStatus, string> = {
 
 export const ProfileScreen = () => {
   const navigation = useNavigation<any>();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [appStatus, setAppStatus] = useState<ApplicationStatus | null>(null);
+  const [stats, setStats] = useState({ attended: 0, upcoming: 0, saved: 0 });
 
   useFocusEffect(
     useCallback(() => {
       loadProfile();
       loadApplicationStatus();
+      loadStats();
     }, []),
   );
 
@@ -88,6 +102,32 @@ export const ProfileScreen = () => {
     }
   };
 
+  const loadStats = async () => {
+    try {
+      const [tickets, favorites] = await Promise.all([
+        ticketsService.getMyTickets().catch(() => []),
+        favoritesService.list().catch(() => []),
+      ]);
+      const list = Array.isArray(tickets) ? tickets : [];
+      const now = new Date();
+      let attended = 0;
+      let upcoming = 0;
+      for (const t of list) {
+        const d = t.event?.startDate ? new Date(t.event.startDate) : null;
+        if (!d) continue;
+        if (d < now) attended++;
+        else upcoming++;
+      }
+      setStats({
+        attended,
+        upcoming,
+        saved: Array.isArray(favorites) ? favorites.length : 0,
+      });
+    } catch {
+      // silent
+    }
+  };
+
   const handleSignOut = async () => {
     await authService.logout();
   };
@@ -106,56 +146,94 @@ export const ProfileScreen = () => {
   const isOrganizer = role === 'organizer';
   const isAdmin = role === 'admin';
 
-  const menuItems = [
-    { icon: Ticket, label: 'My Tickets', route: 'Tickets' },
-    { icon: Heart, label: 'Favorites', route: 'Favorites' },
-    { icon: Clock, label: 'Waitlist', route: 'Waitlist' },
-    { icon: Shield, label: 'Safety Center', route: 'SafetyCenter' },
-    { icon: Settings, label: 'Settings', route: 'Settings' },
+  const accountItems = [
+    { icon: Ticket, label: 'My Tickets', route: 'Tickets' as const, iconColor: 'pu' as const },
+    { icon: Heart, label: 'Going?', route: 'Favorites' as const, iconColor: 'gr' as const },
+    { icon: Clock, label: 'Waitlist', route: 'Waitlist' as const, iconColor: 'or' as const },
+    { icon: CreditCard, label: 'Wallet & Payments', route: 'Wallet' as const, iconColor: 'gr' as const },
+    { icon: Settings, label: 'Settings', route: 'Settings' as const, iconColor: 'gr' as const },
+  ];
+  const safetyItems = [
+    { icon: Shield, label: 'Safety Center', route: 'SafetyCenter' as const, iconColor: 'pk' as const },
   ];
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+      <View style={styles.profHdr}>
+        <Text style={styles.profHdrTitle}>Profile</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Profile Section */}
-        <View style={styles.profileSection}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* prof-hero v2 */}
+        <View style={styles.profHero}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          {isLoading ? (
-            <ActivityIndicator size="small" color={COLORS.textPrimary} />
-          ) : (
-            <>
-              <Text style={styles.profileName}>{displayName}</Text>
-              <Text style={styles.profileEmail}>{user?.email || 'No email'}</Text>
-              {(isOrganizer || isAdmin) && (
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleBadgeText}>
-                    {isAdmin ? 'ADMIN' : 'ORGANIZER'}
-                  </Text>
+          <View style={styles.profInfo}>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={COLORS.text} />
+            ) : (
+              <>
+                <Text style={styles.profName}>{displayName}</Text>
+                <Text style={styles.profEmail}>{user?.email || 'No email'}</Text>
+                {(isOrganizer || isAdmin) && (
+                  <View style={styles.roleBadge}>
+                    <Text style={styles.roleBadgeText}>
+                      {isAdmin ? 'ADMIN' : 'ORGANIZER'}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.profStats}>
+                  <View style={styles.ps}>
+                    <Text style={styles.psN}>{stats.attended}</Text>
+                    <Text style={styles.psL}>Attended</Text>
+                  </View>
+                  <View style={styles.ps}>
+                    <Text style={styles.psN}>{stats.upcoming}</Text>
+                    <Text style={styles.psL}>Upcoming</Text>
+                  </View>
+                  <View style={styles.ps}>
+                    <Text style={styles.psN}>{stats.saved}</Text>
+                    <Text style={styles.psL}>Saved</Text>
+                  </View>
                 </View>
-              )}
-            </>
-          )}
+              </>
+            )}
+          </View>
         </View>
 
-        {/* Menu Items */}
-        <View style={styles.menuSection}>
-          {menuItems.map((item, index) => (
+        {/* Menu sections - Account */}
+        <View style={styles.menuSec}>
+          <Text style={styles.menuSecLabel}>Account</Text>
+          {accountItems.map((item, idx) => (
             <TouchableOpacity
-              key={index}
-              style={styles.menuItem}
+              key={idx}
+              style={styles.mi}
               onPress={() => navigation.navigate(item.route)}
             >
-              <View style={styles.menuItemLeft}>
-                <item.icon size={24} color={COLORS.textPrimary} />
-                <Text style={styles.menuItemText}>{item.label}</Text>
+              <View style={[styles.miIcon, item.iconColor === 'pu' && styles.miIconPu, item.iconColor === 'gr' && styles.miIconGr, item.iconColor === 'pk' && styles.miIconPk, item.iconColor === 'or' && styles.miIconOr]}>
+                <item.icon size={14} color={item.iconColor === 'pu' ? COLORS.accent2 : item.iconColor === 'gr' ? COLORS.green : item.iconColor === 'pk' ? COLORS.red : COLORS.amber} />
               </View>
-              <ChevronRight size={20} color={COLORS.textSecondary} />
+              <Text style={styles.miLabel}>{item.label}</Text>
+              <ChevronRight size={14} color={COLORS.muted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Menu sections - Safety */}
+        <View style={styles.menuSec}>
+          <Text style={styles.menuSecLabel}>Safety</Text>
+          {safetyItems.map((item, idx) => (
+            <TouchableOpacity
+              key={idx}
+              style={styles.mi}
+              onPress={() => navigation.navigate(item.route)}
+            >
+              <View style={[styles.miIcon, styles.miIconPk]}>
+                <item.icon size={14} color={COLORS.red} />
+              </View>
+              <Text style={styles.miLabel}>{item.label}</Text>
+              <ChevronRight size={14} color={COLORS.muted} />
             </TouchableOpacity>
           ))}
         </View>
@@ -245,7 +323,7 @@ export const ProfileScreen = () => {
 
         {/* Sign Out */}
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <LogOut size={24} color="#EF4444" />
+          <LogOut size={24} color={COLORS.red} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -254,42 +332,93 @@ export const ProfileScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  header: { padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: COLORS.textPrimary },
-  content: { padding: 16 },
+  container: { flex: 1, backgroundColor: COLORS.bg },
+  profHdr: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 0 },
+  profHdrTitle: { fontSize: 20, fontWeight: '800', color: COLORS.text },
+  content: { paddingBottom: 32 },
 
-  profileSection: {
-    alignItems: 'center', paddingVertical: 32,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginBottom: 24,
+  profHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: 14,
   },
   avatar: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.accent,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+    width: 62,
+    height: 62,
+    borderRadius: 20,
+    backgroundColor: COLORS.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
-  avatarText: { fontSize: 32, fontWeight: 'bold', color: COLORS.white },
-  profileName: { fontSize: 20, fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 4 },
-  profileEmail: { fontSize: 14, color: COLORS.textSecondary },
+  avatarText: { fontSize: 20, fontWeight: '800', color: COLORS.white },
+  profInfo: { flex: 1 },
+  profName: { fontSize: 17, fontWeight: '800', color: COLORS.text, marginBottom: 2 },
+  profEmail: { fontSize: 11, color: COLORS.dim, marginBottom: 8 },
   roleBadge: {
-    marginTop: 8, backgroundColor: COLORS.accent, paddingHorizontal: 12,
-    paddingVertical: 3, borderRadius: 999,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  roleBadgeText: { color: COLORS.white, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
+  roleBadgeText: { color: COLORS.white, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  profStats: { flexDirection: 'row', gap: 16, marginTop: 4 },
+  ps: { alignItems: 'center' },
+  psN: { fontSize: 16, fontWeight: '800', color: COLORS.text },
+  psL: { fontSize: 9, color: COLORS.muted, marginTop: 1 },
 
-  menuSection: {
-    backgroundColor: COLORS.surface, borderRadius: 12, overflow: 'hidden', marginBottom: 24,
+  menuSec: { paddingHorizontal: 20, paddingBottom: 10 },
+  menuSecLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.12,
+    textTransform: 'uppercase',
+    color: COLORS.muted,
+    marginBottom: 7,
   },
-  menuItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)',
+  mi: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.card,
+    borderRadius: 14,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  menuItemText: { fontSize: 16, color: COLORS.textPrimary },
+  miIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  miIconPu: { backgroundColor: 'rgba(123,92,250,0.18)' },
+  miIconGr: { backgroundColor: 'rgba(31,201,142,0.12)' },
+  miIconPk: { backgroundColor: 'rgba(255,77,106,0.12)' },
+  miIconOr: { backgroundColor: 'rgba(245,166,35,0.12)' },
+  miLabel: { flex: 1, fontSize: 13, fontWeight: '500', color: COLORS.text },
 
   // Admin card
   adminCard: {
-    marginBottom: 16, borderRadius: 16, overflow: 'hidden',
-    backgroundColor: '#1A1A2E', borderWidth: 1, borderColor: 'rgba(59,130,246,0.3)',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: 'rgba(59,130,246,0.3)',
   },
   adminCardInner: { flexDirection: 'row', alignItems: 'center', padding: 16 },
   adminIcon: {
@@ -299,8 +428,17 @@ const styles = StyleSheet.create({
   adminTitle: { color: COLORS.white, fontSize: 16, fontWeight: '700', marginBottom: 2 },
   adminSub: { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
 
-  // Plat Pro card
-  proCard: { marginTop: 0, marginBottom: 24, padding: 16, borderRadius: 16, backgroundColor: '#050816' },
+  // Plat Pro card (no money-first banner — user excluded)
+  proCard: {
+    marginHorizontal: 20,
+    marginTop: 0,
+    marginBottom: 24,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
   proCardHeader: { flexDirection: 'row', alignItems: 'center' },
   proIcon: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.accent,
@@ -316,8 +454,15 @@ const styles = StyleSheet.create({
   statusDot: { width: 8, height: 8, borderRadius: 4 },
 
   signOutButton: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 12, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#EF4444',
+    marginHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.red,
   },
-  signOutText: { fontSize: 16, fontWeight: '600', color: '#EF4444' },
+  signOutText: { fontSize: 16, fontWeight: '600', color: COLORS.red },
 });

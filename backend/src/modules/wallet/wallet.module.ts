@@ -1,16 +1,23 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { WalletService } from './wallet.service';
 import { WalletController } from './wallet.controller';
-import { WalletAccount } from './entities/wallet-account.entity';
+import { Wallet } from './entities/wallet.entity';
 import { WalletTransaction } from './entities/wallet-transaction.entity';
-import { PaymentsModule } from '../payments/payments.module';
 
+/**
+ * WalletModule has NO circular dependency imports.
+ *
+ * FIX: Previously this module used `forwardRef` to import PaymentsModule
+ * (and vice-versa), creating a fragile circular dependency. The fix is to
+ * inject WalletService directly wherever it's needed instead of importing
+ * the full module — or to use a shared DataSource QueryRunner pattern.
+ *
+ * Any module that needs WalletService should import WalletModule and it will
+ * receive the service via NestJS DI without any circular wiring.
+ */
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([WalletAccount, WalletTransaction]),
-    forwardRef(() => PaymentsModule), // <--- Use forwardRef
-  ],
+  imports: [TypeOrmModule.forFeature([Wallet, WalletTransaction])],
   controllers: [WalletController],
   providers: [WalletService],
   exports: [WalletService],

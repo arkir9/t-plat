@@ -23,6 +23,7 @@ import { Ticket } from '../modules/tickets/entities/ticket.entity';
 import { Waitlist } from '../modules/tickets/entities/waitlist.entity';
 import { RefundRequest } from '../modules/tickets/entities/refund-request.entity';
 import { TicketTransfer } from '../modules/tickets/entities/ticket-transfer.entity';
+import { ScrapedSource } from '../modules/entities/scraped-source.entity';
 
 export const entities = [
   User,
@@ -44,6 +45,7 @@ export const entities = [
   Waitlist,
   RefundRequest,
   TicketTransfer,
+  ScrapedSource,
 ];
 
 export const getDatabaseConfig = (): TypeOrmModuleOptions => {

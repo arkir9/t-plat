@@ -29,24 +29,30 @@ export const paymentsService = {
   },
 
   /**
-   * Create M-Pesa STK Push payment
+   * Create M-Pesa STK Push payment.
+   * Backend returns checkoutRequestId — we use it as paymentId for polling.
    */
   async createMpesaPayment(
     orderId: string,
     phoneNumber: string,
   ): Promise<PaymentResponse> {
-    const response = await api.post('/payments/mpesa/stk-push', {
-      orderId,
+    const response = await api.post(`/payments/mpesa/initiate/${orderId}`, {
       phoneNumber,
     });
-    return response.data;
+    const data = response.data;
+    return {
+      paymentId: data.checkoutRequestId ?? data.paymentId,
+      checkoutRequestID: data.checkoutRequestId,
+      merchantRequestId: data.merchantRequestId,
+      message: data.message,
+    };
   },
 
   /**
-   * Verify payment status
+   * Verify payment status by checkoutRequestId (M-Pesa) or paymentId.
    */
   async verifyPayment(paymentId: string) {
-    const response = await api.get(`/payments/${paymentId}/verify`);
+    const response = await api.get(`/payments/verify/${paymentId}`);
     return response.data;
   },
 };

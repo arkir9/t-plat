@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plat — Tab Navigation v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg: #07070F;
+  --surface: #10101E;
+  --card: #14142A;
+  --border: rgba(255,255,255,0.07);
+  --accent: #7B5CFA;
+  --accent2: #B06EFF;
+  --text: #EFEFF8;
+  --muted: #55547A;
+  --dim: #9090B8;
+  --green: #1FC98E;
+  --amber: #F5A623;
+  --red: #FF4D6A;
+  --tab-h: 72px;
+}
+
+body {
+  background: #060610;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px 60px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.page-eyebrow {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+  text-align: center;
+}
+.page-heading {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 4px;
+}
+.page-sub {
+  font-size: 13px;
+  color: var(--dim);
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+/* change log pills */
+.changes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+  max-width: 700px;
+}
+.change-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--dim);
+}
+.change-pill .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-green { background: var(--green); }
+.dot-amber { background: var(--amber); }
+.dot-red   { background: var(--red); }
+.dot-purple{ background: var(--accent2); }
+
+/* layout */
+.layout {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ── PHONE ─────────────────────────────── */
+.phone {
+  width: 375px;
+  height: 740px;
+  background: var(--bg);
+  border-radius: 50px;
+  border: 1.5px solid rgba(123,92,250,0.2);
+  box-shadow:
+    0 0 0 6px rgba(0,0,0,0.5),
+    0 0 100px rgba(123,92,250,0.12),
+    0 50px 100px rgba(0,0,0,0.7);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.phone-notch {
+  width: 110px; height: 26px;
+  background: #000;
+  border-radius: 0 0 18px 18px;
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+}
+
+.status-bar {
+  height: 42px;
+  padding: 14px 22px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 20;
+}
+.status-time { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--text); }
+.status-icons { font-size:11px; color:var(--text); display:flex; gap:4px; align-items:center; }
+
+/* screens */
+.screen { flex:1; overflow:hidden; display:none; position:relative; }
+.screen.active { display:flex; flex-direction:column; }
+
+/* ─────────────────────────────────────── */
+/* HOME SCREEN                             */
+/* ─────────────────────────────────────── */
+#s-home { background:var(--bg); overflow-y:auto; }
+
+.home-hdr {
+  padding: 12px 20px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+.logo {
+  font-family:'Syne',sans-serif;
+  font-size:24px; font-weight:800;
+  color:var(--text); letter-spacing:-0.04em;
+}
+.logo em { color:var(--accent2); font-style:normal; }
+.hdr-icons { display:flex; gap:10px; }
+.ico-btn {
+  width:34px; height:34px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:11px;
+  display:flex; align-items:center; justify-content:center;
+}
+.ico-btn svg { width:15px; height:15px; color:var(--dim); }
+
+/* Tonight hero banner */
+.tonight-banner {
+  margin: 14px 20px 0;
+  background: linear-gradient(135deg, #1A0B3B 0%, #2D1060 50%, rgba(123,92,250,0.3) 100%);
+  border: 1px solid rgba(123,92,250,0.35);
+  border-radius: 20px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tonight-banner::before {
+  content:'';
+  position:absolute;
+  top:-30px; right:-30px;
+  width:120px; height:120px;
+  background: radial-gradient(circle, rgba(176,110,255,0.25) 0%, transparent 70%);
+}
+.tonight-tag {
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  background:rgba(245,166,35,0.15);
+  border:1px solid rgba(245,166,35,0.3);
+  border-radius:6px;
+  padding:3px 8px;
+  font-size:10px; font-weight:700;
+  color:var(--amber);
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  margin-bottom:8px;
+}
+.tonight-tag .pulse {
+  width:6px; height:6px;
+  border-radius:50%;
+  background:var(--amber);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50% { opacity:0.4; transform:scale(0.7); }
+}
+.tonight-title {
+  font-family:'Syne',sans-serif;
+  font-size:16px; font-weight:800;
+  color:var(--text); margin-bottom:4px;
+}
+.tonight-sub { font-size:11px; color:rgba(255,255,255,0.55); margin-bottom:12px; }
+.tonight-chips { display:flex; gap:7px; }
+.t-chip {
+  padding:5px 12px;
+  border-radius:14px;
+  font-size:11px; font-weight:600;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.12);
+  color:var(--text);
+  white-space:nowrap;
+}
+.t-chip.hi {
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#fff;
+}
+
+.search-wrap {
+  padding: 14px 20px 0;
+  flex-shrink: 0;
+}
+.search-bar {
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:11px 14px;
+  display:flex; align-items:center; gap:9px;
+}
+.search-bar svg { width:14px; height:14px; color:var(--muted); flex-shrink:0; }
+.search-bar span { font-size:13px; color:var(--muted); }
+
+.chips-row {
+  padding: 12px 20px 0;
+  display:flex; gap:7px;
+  overflow-x:auto; scrollbar-width:none;
+  flex-shrink:0;
+}
+.chips-row::-webkit-scrollbar { display:none; }
+.chip {
+  padding:6px 13px;
+  border-radius:18px;
+  font-size:11px; font-weight:500;
+  white-space:nowrap; flex-shrink:0;
+  border:1px solid var(--border);
+  color:var(--dim);
+  background:var(--surface);
+}
+.chip.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+.sec-hdr {
+  padding:16px 20px 10px;
+  display:flex; justify-content:space-between; align-items:center;
+  flex-shrink:0;
+}
+.sec-title { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:var(--text); }
+.sec-link { font-size:11px; color:var(--accent2); font-weight:500; }
+
+.feat-scroll {
+  padding:0 20px 0;
+  display:flex; gap:10px;
+  overflow-x:auto; scrollbar-width:none;
+  flex-shrink:0;
+}
+.feat-scroll::-webkit-scrollbar { display:none; }
+
+.fc {
+  flex-shrink:0;
+  width:200px; height:120px;
+  border-radius:18px;
+  overflow:hidden;
+  position:relative;
+}
+.fc-bg { width:100%; height:100%; }
+.fc-ov {
+  position:absolute; inset:0;
+  background:linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 55%);
+  padding:10px;
+  display:flex; flex-direction:column; justify-content:flex-end;
+}
+.fc-cat { font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent2); margin-bottom:2px; }
+.fc-title { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; color:#fff; margin-bottom:3px; }
+.fc-meta { font-size:9px; color:rgba(255,255,255,0.6); }
+.fc-price {
+  position:absolute; top:9px; right:9px;
+  background:rgba(0,0,0,0.55);
+  backdrop-filter:blur(6px);
+  border-radius:7px;
+  padding:3px 7px;
+  font-size:9px; font-weight:700;
+  color:var(--green);
+  border:1px solid rgba(31,201,142,0.25);
+}
+
+.ev-list { padding:0 20px; display:flex; flex-direction:column; gap:10px; }
+.ev-item {
+  display:flex; gap:10px;
+  background:var(--card);
+  border-radius:16px;
+  padding:11px;
+  border:1px solid var(--border);
+  flex-shrink:0;
+}
+.ev-thumb {
+  width:68px; height:68px;
+  border-radius:12px;
+  overflow:hidden; flex-shrink:0;
+}
+.ev-info { flex:1; min-width:0; }
+.ev-cat { font-size:9px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; color:var(--accent2); margin-bottom:2px; }
+.ev-name { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:4px; }
+.ev-mr { display:flex; align-items:center; gap:4px; margin-bottom:2px; }
+.ev-mr svg { width:9px; height:9px; color:var(--muted); flex-shrink:0; }
+.ev-mr span { font-size:10px; color:var(--dim); }
+.ev-price { font-family:'Syne',sans-serif; font-size:12px; font-weight:700; color:var(--green); margin-top:3px; }
+
+/* empty state */
+.empty-state {
+  flex:1;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:40px 30px;
+  text-align:center;
+}
+.empty-icon { font-size:40px; margin-bottom:14px; opacity:0.4; }
+.empty-title { font-family:'Syne',sans-serif; font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px; }
+.empty-text { font-size:12px; color:var(--dim); line-height:1.7; }
+
+/* ─────────────────────────────────────── */
+/* GOING? SCREEN (was Saved)               */
+/* ─────────────────────────────────────── */
+#s-going { background:var(--bg); overflow-y:auto; }
+
+.going-hdr {
+  padding:14px 20px 6px;
+  display:flex; justify-content:space-between; align-items:baseline;
+}
+.going-title { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--text); }
+.going-count { font-size:11px; color:var(--dim); }
+
+.going-grid {
+  padding:10px 20px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.gc {
+  background:var(--card);
+  border-radius:16px;
+  overflow:hidden;
+  border:1px solid var(--border);
+  position:relative;
+}
+.gc-img { height:88px; position:relative; }
+.gc-img-bg { width:100%; height:100%; }
+.gc-heart {
+  position:absolute; top:7px; right:7px;
+  width:22px; height:22px;
+  background:rgba(0,0,0,0.55);
+  backdrop-filter:blur(6px);
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+}
+.gc-heart svg { width:10px; height:10px; color:#FF4D6A; }
+
+/* urgency badge */
+.urgency {
+  position:absolute; bottom:7px; left:7px;
+  padding:3px 7px;
+  border-radius:6px;
+  font-size:9px; font-weight:700;
+  display:flex; align-items:center; gap:3px;
+}
+.urgency.sold { background:rgba(255,77,106,0.85); color:#fff; }
+.urgency.low  { background:rgba(245,166,35,0.85); color:#000; }
+.urgency.up   { background:rgba(31,201,142,0.85); color:#000; }
+
+.gc-info { padding:8px 9px 10px; }
+.gc-name { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:2px; }
+.gc-date { font-size:10px; color:var(--dim); margin-bottom:4px; }
+.gc-price { font-size:11px; font-weight:700; color:var(--green); }
+.gc-social { font-size:9px; color:var(--muted); margin-top:2px; }
+
+/* price drop alert */
+.price-drop-bar {
+  margin:0 20px 12px;
+  background:rgba(31,201,142,0.1);
+  border:1px solid rgba(31,201,142,0.25);
+  border-radius:12px;
+  padding:10px 12px;
+  display:flex; align-items:center; gap:8px;
+}
+.pd-icon { font-size:16px; }
+.pd-text {}
+.pd-label { font-size:11px; font-weight:700; color:var(--green); }
+.pd-sub { font-size:10px; color:var(--dim); }
+
+/* ─────────────────────────────────────── */
+/* MAP SCREEN                              */
+/* ─────────────────────────────────────── */
+#s-map { background:#080D1A; position:relative; flex:1; overflow:hidden; }
+.map-bg {
+  position:absolute; inset:0;
+  background:
+    repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,0.025) 40px),
+    repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,0.025) 40px),
+    radial-gradient(ellipse 280px 180px at 50% 42%, rgba(123,92,250,0.06) 0%, transparent 70%),
+    linear-gradient(170deg,#08101F 0%,#060B18 100%);
+}
+.map-roads {
+  position:absolute; inset:0;
+  opacity:0.18;
+}
+.map-roads svg { width:100%; height:100%; }
+
+.map-hdr {
+  position:absolute; top:0; left:0; right:0;
+  padding:12px 20px;
+  background:linear-gradient(to bottom, rgba(6,7,15,0.95), transparent);
+  display:flex; justify-content:space-between; align-items:center;
+  z-index:5;
+}
+.map-title { font-family:'Syne',sans-serif; font-size:16px; font-weight:700; color:var(--text); }
+.map-filter-row {
+  display:flex; gap:7px;
+}
+.mf-chip {
+  padding:5px 10px;
+  background:rgba(20,20,42,0.85);
+  backdrop-filter:blur(8px);
+  border:1px solid var(--border);
+  border-radius:10px;
+  font-size:10px; font-weight:600;
+  color:var(--dim);
+}
+.mf-chip.on { border-color:var(--accent2); color:var(--accent2); }
+
+/* pins */
+.mp {
+  position:absolute;
+  display:flex; flex-direction:column; align-items:center;
+  cursor:pointer; z-index:4;
+}
+.pb {
+  background:var(--card);
+  color:var(--text);
+  font-family:'Syne',sans-serif;
+  font-size:10px; font-weight:700;
+  padding:5px 9px;
+  border-radius:20px;
+  white-space:nowrap;
+  box-shadow:0 4px 14px rgba(0,0,0,0.5);
+  border:1.5px solid var(--border);
+}
+.pb.sel { background:var(--accent); border-color:var(--accent2); box-shadow:0 4px 18px rgba(123,92,250,0.5); transform:scale(1.08); color:#fff; }
+.pb.free-p { background:rgba(31,201,142,0.2); border-color:rgba(31,201,142,0.4); color:var(--green); }
+.pt { width:2px; height:7px; border-radius:2px; background:var(--muted); margin-top:1px; }
+.pd { width:5px; height:5px; border-radius:50%; background:var(--muted); margin-top:1px; }
+.mp.sel-pin .pt, .mp.sel-pin .pd { background:var(--accent2); }
+
+.cl-pin {
+  position:absolute;
+  width:36px; height:36px;
+  border-radius:50%;
+  background:rgba(123,92,250,0.2);
+  border:2px solid var(--accent);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Syne',sans-serif;
+  font-size:11px; font-weight:800;
+  color:var(--text);
+  box-shadow:0 0 18px rgba(123,92,250,0.25);
+  z-index:4;
+}
+
+/* user dot */
+.user-dot {
+  position:absolute;
+  z-index:4;
+}
+.user-dot-inner {
+  width:14px; height:14px;
+  border-radius:50%;
+  background:#4A9EFF;
+  border:2.5px solid #fff;
+  box-shadow:0 0 10px rgba(74,158,255,0.6);
+}
+.user-dot-ring {
+  position:absolute;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:32px; height:32px;
+  border-radius:50%;
+  background:rgba(74,158,255,0.12);
+  border:1px solid rgba(74,158,255,0.3);
+}
+
+/* selected event preview */
+.sel-preview {
+  position:absolute;
+  bottom:0; left:0; right:0;
+  background:var(--surface);
+  border-radius:22px 22px 0 0;
+  border-top:1px solid var(--border);
+  padding:14px 20px 18px;
+  z-index:6;
+}
+.sp-handle { width:32px; height:3px; background:var(--border); border-radius:2px; margin:0 auto 14px; }
+.sp-row { display:flex; gap:12px; align-items:flex-start; }
+.sp-img { width:64px; height:64px; border-radius:14px; overflow:hidden; flex-shrink:0; }
+.sp-info { flex:1; }
+.sp-cat { font-size:9px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent2); margin-bottom:3px; }
+.sp-name { font-family:'Syne',sans-serif; font-size:14px; font-weight:700; color:var(--text); margin-bottom:4px; }
+.sp-meta { font-size:10px; color:var(--dim); margin-bottom:6px; }
+.sp-bottom { display:flex; justify-content:space-between; align-items:center; margin-top:4px; }
+.sp-price { font-family:'Syne',sans-serif; font-size:15px; font-weight:800; color:var(--green); }
+.sp-btn {
+  background:var(--accent);
+  color:#fff;
+  font-size:12px; font-weight:700;
+  padding:8px 18px;
+  border-radius:12px;
+  font-family:'Syne',sans-serif;
+}
+.sp-nearby {
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--border);
+  display:flex; gap:8px;
+  overflow-x:auto; scrollbar-width:none;
+}
+.sp-nearby::-webkit-scrollbar { display:none; }
+.sp-mini {
+  flex-shrink:0;
+  display:flex; align-items:center; gap:8px;
+  background:var(--card);
+  border-radius:12px;
+  padding:7px 10px;
+  border:1px solid var(--border);
+}
+.sp-mini-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.sp-mini-info {}
+.sp-mini-name { font-size:10px; font-weight:600; color:var(--text); margin-bottom:1px; }
+.sp-mini-price { font-size:9px; color:var(--green); font-weight:700; }
+
+/* ─────────────────────────────────────── */
+/* TICKETS SCREEN                          */
+/* ─────────────────────────────────────── */
+#s-tickets { background:var(--bg); overflow-y:auto; }
+
+.tkt-hdr {
+  padding:14px 20px 14px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.tkt-title { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; color:var(--text); }
+
+.seg {
+  margin:0 20px 16px;
+  background:var(--surface);
+  border-radius:14px; padding:4px;
+  display:flex;
+  border:1px solid var(--border);
+}
+.seg-t {
+  flex:1; padding:7px 4px;
+  border-radius:10px;
+  font-size:11px; font-weight:600;
+  text-align:center; color:var(--muted);
+  cursor:pointer;
+}
+.seg-t.on { background:var(--accent); color:#fff; }
+
+/* countdown chip */
+.countdown-chip {
+  display:inline-flex;
+  align-items:center; gap:5px;
+  background:rgba(245,166,35,0.1);
+  border:1px solid rgba(245,166,35,0.25);
+  border-radius:8px;
+  padding:4px 9px;
+  font-size:10px; font-weight:700;
+  color:var(--amber);
+  margin:0 20px 14px;
+}
+
+.tkt-card {
+  margin:0 20px 12px;
+  background:var(--card);
+  border-radius:20px;
+  overflow:hidden;
+  border:1px solid var(--border);
+}
+.tkt-top { display:flex; gap:11px; padding:13px; }
+.tkt-thumb { width:58px; height:58px; border-radius:12px; overflow:hidden; flex-shrink:0; }
+.tkt-info {}
+.tkt-name { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.tkt-meta { font-size:10px; color:var(--dim); margin-bottom:4px; }
+.tkt-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 7px; border-radius:6px;
+  font-size:9px; font-weight:700;
+}
+.tkt-badge.live { background:rgba(255,77,106,0.12); color:var(--red); }
+.tkt-badge.up   { background:rgba(123,92,250,0.12); color:var(--accent2); }
+.tkt-badge.past { background:rgba(255,255,255,0.05); color:var(--muted); }
+.tkt-badge .live-dot { width:5px; height:5px; border-radius:50%; background:var(--red); animation:pulse 1.2s infinite; }
+
+.tkt-divider {
+  margin:0 13px;
+  border-top:1px dashed rgba(255,255,255,0.07);
+  position:relative;
+}
+.tkt-divider::before, .tkt-divider::after {
+  content:'';
+  position:absolute; top:-8px;
+  width:13px; height:13px;
+  border-radius:50%;
+  background:var(--bg);
+  border:1px solid var(--border);
+}
+.tkt-divider::before { left:-20px; }
+.tkt-divider::after  { right:-20px; }
+
+.tkt-bottom {
+  padding:9px 13px 11px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.tkt-type { font-size:10px; color:var(--dim); }
+.tkt-type strong { color:var(--text); font-weight:600; }
+.tkt-actions { display:flex; gap:8px; align-items:center; }
+.tkt-qr {
+  display:flex; align-items:center; gap:4px;
+  font-size:10px; color:var(--accent2); font-weight:600;
+}
+.tkt-qr svg { width:11px; height:11px; }
+
+/* SOS floating button */
+.sos-btn {
+  position:absolute;
+  bottom:calc(var(--tab-h) + 14px);
+  right:16px;
+  width:44px; height:44px;
+  background:linear-gradient(135deg, var(--red), #FF1744);
+  border-radius:14px;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 20px rgba(255,77,106,0.45);
+  z-index:10;
+}
+.sos-btn span {
+  font-family:'Syne',sans-serif;
+  font-size:11px; font-weight:800;
+  color:#fff; letter-spacing:0.05em;
+}
+
+/* ─────────────────────────────────────── */
+/* PROFILE SCREEN                          */
+/* ─────────────────────────────────────── */
+#s-profile { background:var(--bg); overflow-y:auto; }
+
+.prof-hdr { padding:14px 20px 0; }
+
+.prof-hero {
+  padding:16px 20px 18px;
+  display:flex; align-items:center; gap:14px;
+  border-bottom:1px solid var(--border);
+  margin-bottom:14px;
+}
+.avatar {
+  width:62px; height:62px;
+  border-radius:20px;
+  background:linear-gradient(135deg, var(--accent), var(--accent2));
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Syne',sans-serif;
+  font-size:20px; font-weight:800;
+  color:#fff;
+  border:2px solid rgba(255,255,255,0.1);
+  flex-shrink:0;
+}
+.prof-info {}
+.prof-name { font-family:'Syne',sans-serif; font-size:17px; font-weight:800; color:var(--text); margin-bottom:2px; }
+.prof-email { font-size:11px; color:var(--dim); margin-bottom:8px; }
+.prof-stats { display:flex; gap:16px; }
+.ps { text-align:center; }
+.ps-n { font-family:'Syne',sans-serif; font-size:16px; font-weight:800; color:var(--text); }
+.ps-l { font-size:9px; color:var(--muted); margin-top:1px; }
+
+/* IMPROVED Plat Pro banner */
+.pro-banner {
+  margin:0 20px 14px;
+  background:linear-gradient(135deg, #130B2E 0%, #1E0F4A 40%, rgba(123,92,250,0.25) 100%);
+  border:1px solid rgba(123,92,250,0.4);
+  border-radius:20px;
+  padding:16px;
+  position:relative;
+  overflow:hidden;
+}
+.pro-banner::before {
+  content:'';
+  position:absolute;
+  top:-20px; right:-20px;
+  width:100px; height:100px;
+  background:radial-gradient(circle, rgba(176,110,255,0.2) 0%, transparent 70%);
+}
+.pro-top { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.pro-icon-wrap {
+  width:40px; height:40px;
+  background:linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius:13px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px;
+  flex-shrink:0;
+}
+.pro-text-wrap {}
+.pro-label {
+  font-family:'Syne',sans-serif;
+  font-size:14px; font-weight:800;
+  color:var(--text); margin-bottom:2px;
+}
+.pro-tagline { font-size:11px; color:rgba(255,255,255,0.55); }
+/* the money line */
+.pro-money {
+  background:rgba(31,201,142,0.1);
+  border:1px solid rgba(31,201,142,0.2);
+  border-radius:10px;
+  padding:8px 12px;
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:10px;
+}
+.pro-money-text { font-size:11px; color:var(--dim); line-height:1.4; }
+.pro-money-text strong { color:var(--green); font-weight:700; }
+.pro-money-num {
+  font-family:'Syne',sans-serif;
+  font-size:20px; font-weight:800;
+  color:var(--green);
+}
+.pro-money-sub { font-size:9px; color:var(--muted); text-align:right; }
+.pro-cta {
+  width:100%;
+  background:var(--accent);
+  color:#fff;
+  font-family:'Syne',sans-serif;
+  font-size:12px; font-weight:700;
+  padding:10px;
+  border-radius:12px;
+  text-align:center;
+  letter-spacing:0.03em;
+}
+
+.menu-sec { padding:0 20px 10px; }
+.menu-sec-label {
+  font-size:9px; font-weight:700;
+  letter-spacing:0.12em; text-transform:uppercase;
+  color:var(--muted); padding-left:4px; margin-bottom:7px;
+}
+.mi {
+  display:flex; align-items:center; gap:11px;
+  padding:11px 12px;
+  background:var(--card);
+  border-radius:14px;
+  margin-bottom:6px;
+  border:1px solid var(--border);
+}
+.mi-icon {
+  width:32px; height:32px;
+  border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.mi-icon svg { width:14px; height:14px; }
+.mi-icon.pu { background:rgba(123,92,250,0.18); color:var(--accent2); }
+.mi-icon.gr { background:rgba(31,201,142,0.12); color:var(--green); }
+.mi-icon.pk { background:rgba(255,77,106,0.12); color:var(--red); }
+.mi-icon.or { background:rgba(245,166,35,0.12); color:var(--amber); }
+.mi-label { flex:1; font-size:13px; font-weight:500; color:var(--text); }
+.mi-chev svg { width:11px; height:11px; color:var(--muted); }
+
+/* ─────────────────────────────────────── */
+/* TAB BAR                                 */
+/* ─────────────────────────────────────── */
+.tab-bar {
+  height:var(--tab-h);
+  background:rgba(7,7,15,0.96);
+  backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:flex; align-items:flex-start;
+  padding-top:10px;
+  flex-shrink:0;
+  z-index:20;
+}
+
+.tab {
+  flex:1;
+  display:flex; flex-direction:column;
+  align-items:center; gap:4px;
+  cursor:pointer;
+  position:relative;
+  padding:0 3px;
+}
+
+.tab-icon-wrap {
+  width:32px; height:32px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:12px;
+  transition:all 0.2s;
+  position:relative;
+}
+.tab-icon-wrap svg { width:20px; height:20px; transition:all 0.2s; }
+
+.tab.off .tab-icon-wrap svg { color:var(--muted); }
+.tab.on  .tab-icon-wrap {
+  background:rgba(123,92,250,0.16);
+}
+.tab.on  .tab-icon-wrap svg { color:var(--accent2); }
+
+/* map tab — center, slightly larger */
+.tab.map-tab.on .tab-icon-wrap {
+  background:linear-gradient(135deg, rgba(123,92,250,0.25), rgba(176,110,255,0.2));
+  width:38px; height:38px;
+  margin-top:-3px;
+  box-shadow:0 0 20px rgba(123,92,250,0.3);
+}
+.tab.map-tab .tab-icon-wrap svg { width:22px; height:22px; }
+
+.tab-lbl {
+  font-size:10px; font-weight:500;
+  transition:color 0.2s;
+  font-family:'DM Sans',sans-serif;
+}
+.tab.off .tab-lbl { color:var(--muted); }
+.tab.on  .tab-lbl { color:var(--accent2); font-weight:700; }
+
+/* active indicator pill */
+.tab.on::before {
+  content:'';
+  position:absolute;
+  top:-10px;
+  width:20px; height:2.5px;
+  background:var(--accent2);
+  border-radius:2px;
+}
+
+/* badge */
+.tbadge {
+  position:absolute;
+  top:0; right:2px;
+  background:var(--red);
+  border-radius:10px;
+  min-width:16px; height:16px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:800;
+  color:#fff;
+  border:1.5px solid var(--bg);
+  padding:0 3px;
+  font-family:'Syne',sans-serif;
+}
+
+/* ── gradients ─── */
+.g1 { background:linear-gradient(135deg,#1a0533,#4c1d95,#7c3aed); }
+.g2 { background:linear-gradient(135deg,#064e3b,#065f46,#0f766e); }
+.g3 { background:linear-gradient(135deg,#7c2d12,#c2410c,#f97316); }
+.g4 { background:linear-gradient(135deg,#1e3a5f,#1e40af,#3b82f6); }
+.g5 { background:linear-gradient(135deg,#3b0764,#7e22ce,#a855f7); }
+.g6 { background:linear-gradient(135deg,#0c4a6e,#0369a1,#0ea5e9); }
+.g7 { background:linear-gradient(135deg,#1a1a00,#3d3d00,#7c7c00); }
+
+/* ── ANNOTATION PANEL ─── */
+.annot {
+  width:310px;
+  align-self:flex-start;
+  margin-top:10px;
+}
+.annot-title {
+  font-family:'Syne',sans-serif;
+  font-size:11px; font-weight:700;
+  letter-spacing:0.15em; text-transform:uppercase;
+  color:var(--muted); margin-bottom:22px;
+}
+.an {
+  display:flex; gap:12px;
+  margin-bottom:22px;
+}
+.an-num {
+  width:24px; height:24px;
+  border-radius:7px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Syne',sans-serif;
+  font-size:11px; font-weight:800;
+  color:var(--accent2);
+  flex-shrink:0;
+}
+.an-body {}
+.an-head {
+  font-family:'Syne',sans-serif;
+  font-size:13px; font-weight:700;
+  color:var(--text); margin-bottom:3px;
+}
+.an-text { font-size:11px; color:var(--dim); line-height:1.65; }
+.an-tag {
+  display:inline-block;
+  margin-top:5px;
+  padding:2px 7px;
+  border-radius:5px;
+  font-size:9px; font-weight:700;
+  letter-spacing:0.06em;
+}
+.an-tag.pu { background:rgba(123,92,250,0.1); color:var(--accent2); border:1px solid rgba(123,92,250,0.18); }
+.an-tag.gr { background:rgba(31,201,142,0.1); color:var(--green); border:1px solid rgba(31,201,142,0.18); }
+.an-tag.am { background:rgba(245,166,35,0.1); color:var(--amber); border:1px solid rgba(245,166,35,0.18); }
+.an-tag.rd { background:rgba(255,77,106,0.1); color:var(--red); border:1px solid rgba(255,77,106,0.18); }
+
+</style>
+</head>
+<body>
+
+<div class="page-eyebrow">Plat · v2 Navigation Concept</div>
+<div class="page-heading">Improved Tab Layout</div>
+<div class="page-sub">7 suggestions applied · tap tabs to explore</div>
+
+<div class="changes">
+  <div class="change-pill"><span class="dot dot-purple"></span>Map moved to centre</div>
+  <div class="change-pill"><span class="dot dot-amber"></span>"Tonight" contextual banner</div>
+  <div class="change-pill"><span class="dot dot-red"></span>Saved → "Going?" with urgency</div>
+  <div class="change-pill"><span class="dot dot-green"></span>Ticket count badge (not dot)</div>
+  <div class="change-pill"><span class="dot dot-red"></span>SOS floating on Tickets</div>
+  <div class="change-pill"><span class="dot dot-green"></span>Pro banner leads with money</div>
+  <div class="change-pill"><span class="dot dot-amber"></span>First-time empty state</div>
+</div>
+
+<div class="layout">
+<div>
+<div class="phone">
+  <div class="phone-notch"></div>
+
+  <div class="status-bar">
+    <span class="status-time">9:41</span>
+    <div class="status-icons"><span>●●●</span><span>WiFi</span><span>🔋</span></div>
+  </div>
+
+  <!-- ═══════ HOME ═══════ -->
+  <div class="screen active" id="s-home">
+
+    <div class="home-hdr" style="flex-shrink:0">
+      <div class="logo">plat<em>.</em></div>
+      <div class="hdr-icons">
+        <div class="ico-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </div>
+        <div class="ico-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- TONIGHT HERO (contextual, activates after 4pm on weekends) -->
+    <div class="tonight-banner" style="flex-shrink:0">
+      <div class="tonight-tag"><span class="pulse"></span>Tonight</div>
+      <div class="tonight-title">Friday Night in Nairobi</div>
+      <div class="tonight-sub">14 events happening · doors open from 7pm</div>
+      <div class="tonight-chips">
+        <div class="t-chip hi">Music 6</div>
+        <div class="t-chip">Nightlife 5</div>
+        <div class="t-chip">Comedy 3</div>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <span>Search events, venues...</span>
+      </div>
+    </div>
+
+    <div class="chips-row">
+      <div class="chip on">All</div>
+      <div class="chip">Free</div>
+      <div class="chip">Music</div>
+      <div class="chip">Comedy</div>
+      <div class="chip">Sports</div>
+      <div class="chip">Arts</div>
+    </div>
+
+    <div class="sec-hdr">
+      <span class="sec-title">Featured</span>
+      <span class="sec-link">See all</span>
+    </div>
+
+    <div class="feat-scroll" style="flex-shrink:0">
+      <div class="fc"><div class="fc-bg g1"></div>
+        <div class="fc-ov"><div class="fc-cat">Music · Live</div><div class="fc-title">East Africa Jazz Night</div><div class="fc-meta">Fri · Alchemist Bar</div></div>
+        <div class="fc-price">KES 1,500</div>
+      </div>
+      <div class="fc"><div class="fc-bg g3"></div>
+        <div class="fc-ov"><div class="fc-cat">Comedy</div><div class="fc-title">Churchill Live</div><div class="fc-meta">Sat · KICC</div></div>
+        <div class="fc-price">KES 2,000</div>
+      </div>
+      <div class="fc"><div class="fc-bg g5"></div>
+        <div class="fc-ov"><div class="fc-cat">Nightlife</div><div class="fc-title">Basement Sessions</div><div class="fc-meta">Sat · Club Privé</div></div>
+        <div class="fc-price">KES 800</div>
+      </div>
+    </div>
+
+    <div class="sec-hdr">
+      <span class="sec-title">Upcoming</span>
+      <span class="sec-link">View map</span>
+    </div>
+
+    <div class="ev-list" style="flex-shrink:0;padding-bottom:16px">
+      <div class="ev-item">
+        <div class="ev-thumb"><div class="g2" style="width:100%;height:100%"></div></div>
+        <div class="ev-info">
+          <div class="ev-cat">Sports</div>
+          <div class="ev-name">AFC Leopards vs Gor Mahia</div>
+          <div class="ev-mr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span>Sun 16 Mar · 3:00 PM</span>
+          </div>
+          <div class="ev-mr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/></svg>
+            <span>Kasarani Stadium</span>
+          </div>
+          <div class="ev-price">From KES 500</div>
+        </div>
+      </div>
+      <div class="ev-item">
+        <div class="ev-thumb"><div class="g4" style="width:100%;height:100%"></div></div>
+        <div class="ev-info">
+          <div class="ev-cat">Arts & Culture</div>
+          <div class="ev-name">Nairobi Design Week</div>
+          <div class="ev-mr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span>Mon 17 – Sun 23 Mar</span>
+          </div>
+          <div class="ev-mr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/></svg>
+            <span>Village Market</span>
+          </div>
+          <div class="ev-price" style="color:var(--green)">FREE ENTRY</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ GOING? ═══════ -->
+  <div class="screen" id="s-going">
+
+    <div class="going-hdr">
+      <span class="going-title">Going?</span>
+      <span class="going-count">3 saved events</span>
+    </div>
+
+    <!-- price drop alert -->
+    <div class="price-drop-bar">
+      <div class="pd-icon">📉</div>
+      <div class="pd-text">
+        <div class="pd-label">Price dropped on Churchill Live</div>
+        <div class="pd-sub">Was KES 2,500 → now KES 2,000</div>
+      </div>
+    </div>
+
+    <div class="going-grid">
+      <div class="gc">
+        <div class="gc-img">
+          <div class="gc-img-bg g5"></div>
+          <div class="gc-heart"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+          <div class="urgency low">🔥 3 left</div>
+        </div>
+        <div class="gc-info">
+          <div class="gc-name">Basement Sessions</div>
+          <div class="gc-date">Sat 15 Mar</div>
+          <div class="gc-price">KES 800</div>
+          <div class="gc-social">2 friends going</div>
+        </div>
+      </div>
+      <div class="gc">
+        <div class="gc-img">
+          <div class="gc-img-bg g3"></div>
+          <div class="gc-heart"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+          <div class="urgency sold">↓ Price drop</div>
+        </div>
+        <div class="gc-info">
+          <div class="gc-name">Churchill Live</div>
+          <div class="gc-date">Sat 15 Mar</div>
+          <div class="gc-price">KES 2,000</div>
+          <div class="gc-social">Price dropped!</div>
+        </div>
+      </div>
+      <div class="gc">
+        <div class="gc-img">
+          <div class="gc-img-bg g2"></div>
+          <div class="gc-heart"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+          <div class="urgency up">🆓 Free</div>
+        </div>
+        <div class="gc-info">
+          <div class="gc-name">AFC vs Gor Mahia</div>
+          <div class="gc-date">Sun 16 Mar</div>
+          <div class="gc-price" style="color:var(--green)">From KES 500</div>
+          <div class="gc-social">4 friends going</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MAP ═══════ -->
+  <div class="screen" id="s-map">
+    <div class="map-bg"></div>
+    <div class="map-roads">
+      <svg viewBox="0 0 375 600" preserveAspectRatio="none">
+        <line x1="0" y1="190" x2="375" y2="220" stroke="rgba(255,255,255,1)" stroke-width="5"/>
+        <line x1="0" y1="310" x2="375" y2="290" stroke="rgba(255,255,255,1)" stroke-width="3"/>
+        <line x1="110" y1="0" x2="140" y2="600" stroke="rgba(255,255,255,1)" stroke-width="4"/>
+        <line x1="270" y1="0" x2="250" y2="600" stroke="rgba(255,255,255,1)" stroke-width="2.5"/>
+        <line x1="0" y1="100" x2="375" y2="110" stroke="rgba(255,255,255,1)" stroke-width="2"/>
+        <line x1="190" y1="0" x2="210" y2="600" stroke="rgba(255,255,255,1)" stroke-width="2"/>
+        <line x1="0" y1="420" x2="375" y2="410" stroke="rgba(255,255,255,1)" stroke-width="2"/>
+      </svg>
+    </div>
+
+    <div class="map-hdr">
+      <span class="map-title">Nairobi</span>
+      <div class="map-filter-row">
+        <div class="mf-chip on">Tonight</div>
+        <div class="mf-chip">Free</div>
+        <div class="mf-chip">Near me</div>
+      </div>
+    </div>
+
+    <!-- user location -->
+    <div class="user-dot" style="left:48%;top:41%">
+      <div class="user-dot-ring"></div>
+      <div class="user-dot-inner"></div>
+    </div>
+
+    <!-- pins -->
+    <div class="mp sel-pin" style="left:60%;top:22%">
+      <div class="pb sel">KES 1,500</div><div class="pt"></div><div class="pd"></div>
+    </div>
+    <div class="mp" style="left:28%;top:32%">
+      <div class="pb">KES 800</div><div class="pt"></div><div class="pd"></div>
+    </div>
+    <div class="mp" style="left:74%;top:40%">
+      <div class="pb free-p">Free</div><div class="pt"></div><div class="pd"></div>
+    </div>
+    <div class="cl-pin" style="left:18%;top:52%">5</div>
+    <div class="mp" style="left:52%;top:55%">
+      <div class="pb">KES 2,000</div><div class="pt"></div><div class="pd"></div>
+    </div>
+    <div class="mp" style="left:35%;top:62%">
+      <div class="pb free-p">Free</div><div class="pt"></div><div class="pd"></div>
+    </div>
+
+    <!-- selected event bottom sheet -->
+    <div class="sel-preview">
+      <div class="sp-handle"></div>
+      <div class="sp-row">
+        <div class="sp-img"><div class="g1" style="width:100%;height:100%"></div></div>
+        <div class="sp-info">
+          <div class="sp-cat">Music · Live</div>
+          <div class="sp-name">East Africa Jazz Night</div>
+          <div class="sp-meta">Fri 14 Mar · 8 PM · Alchemist Bar, Westlands</div>
+        </div>
+      </div>
+      <div class="sp-bottom">
+        <div>
+          <div class="sp-price">KES 1,500</div>
+          <div style="font-size:10px;color:var(--dim);margin-top:1px">12 tickets left</div>
+        </div>
+        <div class="sp-btn">Buy Now</div>
+      </div>
+      <div class="sp-nearby">
+        <div class="sp-mini">
+          <div class="sp-mini-dot" style="background:var(--accent)"></div>
+          <div class="sp-mini-info"><div class="sp-mini-name">Basement Sessions</div><div class="sp-mini-price">KES 800 · 0.8km</div></div>
+        </div>
+        <div class="sp-mini">
+          <div class="sp-mini-dot" style="background:var(--green)"></div>
+          <div class="sp-mini-info"><div class="sp-mini-name">Design Week</div><div class="sp-mini-price">Free · 1.2km</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ TICKETS ═══════ -->
+  <div class="screen" id="s-tickets" style="position:relative">
+
+    <div class="tkt-hdr">
+      <span class="tkt-title">My Tickets</span>
+      <div class="ico-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;color:var(--dim)"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      </div>
+    </div>
+
+    <div class="seg">
+      <div class="seg-t on">Upcoming</div>
+      <div class="seg-t">Past</div>
+      <div class="seg-t">Waitlist</div>
+    </div>
+
+    <!-- countdown -->
+    <div class="countdown-chip">
+      ⏱ East Africa Jazz Night starts in 6 hrs 24 min
+    </div>
+
+    <div class="tkt-card">
+      <div class="tkt-top">
+        <div class="tkt-thumb"><div class="g1" style="width:100%;height:100%"></div></div>
+        <div class="tkt-info">
+          <div class="tkt-name">East Africa Jazz Night</div>
+          <div class="tkt-meta">Fri 14 Mar · 8:00 PM · Alchemist</div>
+          <div class="tkt-badge live"><span class="live-dot"></span>Tonight</div>
+        </div>
+      </div>
+      <div class="tkt-divider"></div>
+      <div class="tkt-bottom">
+        <div class="tkt-type">1× <strong>General</strong></div>
+        <div class="tkt-actions">
+          <div class="tkt-qr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/></svg>
+            View QR
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tkt-card">
+      <div class="tkt-top">
+        <div class="tkt-thumb"><div class="g3" style="width:100%;height:100%"></div></div>
+        <div class="tkt-info">
+          <div class="tkt-name">Churchill Live Nairobi</div>
+          <div class="tkt-meta">Sat 15 Mar · 7:30 PM · KICC</div>
+          <div class="tkt-badge up">● Upcoming</div>
+        </div>
+      </div>
+      <div class="tkt-divider"></div>
+      <div class="tkt-bottom">
+        <div class="tkt-type">2× <strong>VIP</strong></div>
+        <div class="tkt-actions">
+          <div class="tkt-qr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/></svg>
+            View QR
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOS floating button — visible during active event window -->
+    <div class="sos-btn"><span>SOS</span></div>
+  </div>
+
+  <!-- ═══════ PROFILE ═══════ -->
+  <div class="screen" id="s-profile">
+
+    <div style="height:10px;flex-shrink:0"></div>
+
+    <div class="prof-hero" style="flex-shrink:0">
+      <div class="avatar">KO</div>
+      <div class="prof-info">
+        <div class="prof-name">Kofi Osei</div>
+        <div class="prof-email">kofi@example.com</div>
+        <div class="prof-stats">
+          <div class="ps"><div class="ps-n">12</div><div class="ps-l">Attended</div></div>
+          <div class="ps"><div class="ps-n">2</div><div class="ps-l">Upcoming</div></div>
+          <div class="ps"><div class="ps-n">3</div><div class="ps-l">Saved</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPROVED PRO BANNER — money first -->
+    <div class="pro-banner" style="flex-shrink:0">
+      <div class="pro-top">
+        <div class="pro-icon-wrap">⚡</div>
+        <div class="pro-text-wrap">
+          <div class="pro-label">Plat Pro</div>
+          <div class="pro-tagline">Create events. Earn instantly.</div>
+        </div>
+      </div>
+      <!-- the money line — this is the hook -->
+      <div class="pro-money">
+        <div class="pro-money-text">Your cut from a <strong>KES 1,000 ticket</strong><br>paid to your M-Pesa instantly</div>
+        <div>
+          <div class="pro-money-num">KES 950</div>
+          <div class="pro-money-sub">you keep · 5% to plat</div>
+        </div>
+      </div>
+      <div class="pro-cta">Apply Now — Free to Start</div>
+    </div>
+
+    <div class="menu-sec" style="flex-shrink:0">
+      <div class="menu-sec-label">Account</div>
+      <div class="mi">
+        <div class="mi-icon pu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <span class="mi-label">Edit Profile</span>
+        <div class="mi-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div>
+      </div>
+      <div class="mi">
+        <div class="mi-icon gr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+        <span class="mi-label">Wallet & Payments</span>
+        <div class="mi-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div>
+      </div>
+    </div>
+    <div class="menu-sec" style="flex-shrink:0">
+      <div class="menu-sec-label">Safety</div>
+      <div class="mi">
+        <div class="mi-icon pk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <span class="mi-label">Safety Center</span>
+        <div class="mi-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div>
+      </div>
+      <div class="mi">
+        <div class="mi-icon or"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <span class="mi-label">Emergency Contacts</span>
+        <div class="mi-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9,18 15,12 9,6"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ TAB BAR ═══════ -->
+  <div class="tab-bar">
+    <!-- 1 Home -->
+    <div class="tab on" data-screen="s-home">
+      <div class="tab-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </div>
+      <span class="tab-lbl">Home</span>
+    </div>
+    <!-- 2 Going? -->
+    <div class="tab off" data-screen="s-going">
+      <div class="tab-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </div>
+      <span class="tab-lbl">Going?</span>
+    </div>
+    <!-- 3 Map — CENTRE -->
+    <div class="tab off map-tab" data-screen="s-map">
+      <div class="tab-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+      </div>
+      <span class="tab-lbl">Map</span>
+    </div>
+    <!-- 4 Tickets -->
+    <div class="tab off" data-screen="s-tickets">
+      <div class="tab-icon-wrap" style="position:relative">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z"/></svg>
+        <div class="tbadge">2</div>
+      </div>
+      <span class="tab-lbl">Tickets</span>
+    </div>
+    <!-- 5 Profile -->
+    <div class="tab off" data-screen="s-profile">
+      <div class="tab-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <span class="tab-lbl">Profile</span>
+    </div>
+  </div>
+
+</div><!-- /phone -->
+<div style="text-align:center;margin-top:16px;font-family:'Syne',sans-serif;font-size:10px;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted)">Home · Going? · Map · Tickets · Profile</div>
+</div>
+
+<!-- ANNOTATIONS -->
+<div class="annot">
+  <div class="annot-title">Changes applied</div>
+
+  <div class="an">
+    <div class="an-num">1</div>
+    <div class="an-body">
+      <div class="an-head">Map is now the centre tab</div>
+      <div class="an-text">Spatial discovery is Plat's biggest differentiator in Nairobi. It earns the anchor position. New order: Home · Going? · Map · Tickets · Profile.</div>
+      <span class="an-tag pu">Visual anchor</span>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="an-num">2</div>
+    <div class="an-body">
+      <div class="an-head">"Tonight" contextual banner</div>
+      <div class="an-text">Activates after 4pm on Fri/Sat. Counts active events by category. Built from the AI scraper's real data — zero manual curation needed.</div>
+      <span class="an-tag am">Activates at 4pm Fri/Sat</span>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="an-num">3</div>
+    <div class="an-body">
+      <div class="an-head">Saved → "Going?" with urgency</div>
+      <div class="an-text">Renamed to signal intent. Cards now show urgency signals: tickets left count, price drop alerts, and friend activity. Converts wishlisting to buying.</div>
+      <span class="an-tag rd">Drives purchase conversion</span>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="an-num">4</div>
+    <div class="an-body">
+      <div class="an-head">Ticket badge shows count</div>
+      <div class="an-text">Badge shows "2" not just a red dot. Instantly tells users how many upcoming events they have tickets for. Pulsing on event day.</div>
+      <span class="an-tag pu">Specific, not generic</span>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="an-num">5</div>
+    <div class="an-body">
+      <div class="an-head">SOS floating button on Tickets</div>
+      <div class="an-text">Appears when an event is in its active window (2hrs before → end time). One tap away, not buried in Profile → Settings → Safety Center.</div>
+      <span class="an-tag rd">Trust signal for solo attendees</span>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="an-num">6</div>
+    <div class="an-body">
+      <div class="an-head">Pro banner leads with money</div>
+      <div class="an-text">Shows the actual split calculation: "KES 1,000 ticket → KES 950 to you." The 5% instant M-Pesa payout is genuinely unusual — make it the hero, not a tagline.</div>
+      <span class="an-tag gr">KES 950 you keep · 5% to plat</span>
+    </div>
+  </div>
+
+  <div class="an">
+    <div class="an-num">7</div>
+    <div class="an-body">
+      <div class="an-head">Countdown chip on Tickets</div>
+      <div class="an-text">When an event is within 24hrs, a countdown chip appears above the ticket cards. Creates urgency and surfaces the right information at exactly the right moment.</div>
+      <span class="an-tag am">Contextual timing signal</span>
+    </div>
+  </div>
+</div>
+
+</div><!-- /layout -->
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const id = tab.dataset.screen;
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      tabs.forEach(t => { t.classList.remove('on'); t.classList.add('off'); });
+      tab.classList.remove('off');
+      tab.classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>

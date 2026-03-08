@@ -79,6 +79,12 @@ export class EventsController {
   }
 
   @Public()
+  @Get('tonight')
+  getTonightEvents(@Query() query: EventQueryDto) {
+    return this.eventsService.getTonightEvents(query);
+  }
+
+  @Public()
   @Post('dev/trigger-scraper')
   async triggerScraper() {
     if (process.env.NODE_ENV === 'production') {

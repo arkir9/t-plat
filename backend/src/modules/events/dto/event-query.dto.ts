@@ -104,6 +104,12 @@ export class EventQueryDto extends PaginationDto {
   @Type(() => Boolean)
   upcoming?: boolean;
 
+  @ApiPropertyOptional({ description: 'Show only events starting tonight (Africa/Nairobi local)' })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  tonight?: boolean;
+
   @ApiPropertyOptional({ description: 'Filter by tags (comma-separated)' })
   @IsOptional()
   @IsString()

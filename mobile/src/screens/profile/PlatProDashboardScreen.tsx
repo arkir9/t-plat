@@ -122,13 +122,22 @@ export function PlatProDashboardScreen({ navigation }: any) {
               <Text style={styles.profileRole}>Verified Organizer</Text>
             </View>
           </View>
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => navigation.navigate('PlatProCreateEvent')}
-          >
-            <Plus color="white" size={20} />
-            <Text style={styles.createButtonText}>New Event</Text>
-          </TouchableOpacity>
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => navigation.navigate('PlatProCreateEvent')}
+            >
+              <Plus color="white" size={20} />
+              <Text style={styles.createButtonText}>New Event</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.refundsButton}
+              onPress={() => navigation.navigate('RefundManagement')}
+            >
+              <DollarSign color={COLORS.primary} size={18} />
+              <Text style={styles.refundsButtonText}>Refunds</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Financial Metrics Grid */}
@@ -315,6 +324,22 @@ export function PlatProDashboardScreen({ navigation }: any) {
             </View>
             <ChevronRight size={20} color={COLORS.textSecondary} />
           </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate('RefundManagement')}
+          >
+            <View style={[styles.menuIconBox, { backgroundColor: '#FCE7F3' }]}>
+              <DollarSign size={24} color="#BE185D" />
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Refund Requests</Text>
+              <Text style={styles.menuSubtitle}>Review and process refunds</Text>
+            </View>
+            <ChevronRight size={20} color={COLORS.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.sectionTitle}>Support</Text>
@@ -374,6 +399,11 @@ const styles = StyleSheet.create({
   avatarText: { color: 'white', fontSize: 20, fontWeight: 'bold' },
   profileName: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
   profileRole: { fontSize: 13, color: COLORS.textSecondary },
+  quickActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -384,6 +414,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   createButtonText: { color: 'white', fontWeight: '600', fontSize: 13 },
+  refundsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  refundsButtonText: { color: COLORS.text, fontWeight: '600', fontSize: 13 },
 
   loadingContainer: {
     height: 180,

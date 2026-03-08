@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -27,31 +32,22 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
+  // ─── Register ─────────────────────────────────────────────────────────────
+
   async register(registerDto: RegisterDto) {
     const { email, password, phone, firstName, lastName } = registerDto;
 
-    // Check if user already exists
+    // Check for existing user — throw a clear conflict rather than silently signing in
     const existingUser = await this.usersRepository.findOne({
       where: phone ? [{ email }, { phone }] : [{ email }],
-      relations: ['organizerProfiles'],
     });
 
     if (existingUser) {
-      // Verify password and sign them in
-      const isPasswordValid = await bcrypt.compare(password, existingUser.passwordHash);
-      if (!isPasswordValid) {
-        throw new UnauthorizedException(
-          'An account with this email already exists. Please use the correct password to sign in.',
-        );
-      }
-      const tokens = await this.generateTokens(existingUser.id);
-      return {
-        user: this.sanitizeUser(existingUser),
-        ...tokens,
-      };
+      throw new ConflictException(
+        'An account with this email or phone number already exists. Please log in instead.',
+      );
     }
 
-    // Hash password and create new user
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = this.usersRepository.create({
@@ -62,20 +58,20 @@ export class AuthService {
       lastName,
     });
 
-    await this.usersRepository.save(user);
-
-    const tokens = await this.generateTokens(user.id);
+    const saved = await this.usersRepository.save(user);
+    const tokens = await this.generateTokens(saved.id);
 
     return {
-      user: this.sanitizeUser(user),
+      user: this.sanitizeUser(saved),
       ...tokens,
     };
   }
 
+  // ─── Login ────────────────────────────────────────────────────────────────
+
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    // Find user with organizer profiles (for role / claim UI)
     const user = await this.usersRepository.findOne({
       where: { email },
       relations: ['organizerProfiles'],
@@ -85,14 +81,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    if (!user.isActive) {
+      throw new UnauthorizedException('Your account has been deactivated');
+    }
 
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Generate tokens
     const tokens = await this.generateTokens(user.id);
 
     return {
@@ -100,6 +97,8 @@ export class AuthService {
       ...tokens,
     };
   }
+
+  // ─── Google OAuth ─────────────────────────────────────────────────────────
 
   async loginWithGoogle(
     dto: GoogleAuthDto,
@@ -111,7 +110,10 @@ export class AuthService {
     const client = new OAuth2Client(googleClientId);
     let payload: { email: string; name?: string; picture?: string; sub: string };
     try {
-      const ticket = await client.verifyIdToken({ idToken: dto.idToken, audience: googleClientId });
+      const ticket = await client.verifyIdToken({
+        idToken: dto.idToken,
+        audience: googleClientId,
+      });
       payload = ticket.getPayload() as typeof payload;
     } catch {
       throw new UnauthorizedException('Invalid Google token');
@@ -130,6 +132,8 @@ export class AuthService {
     const tokens = await this.generateTokens(user.id);
     return { user: this.sanitizeUser(user), ...tokens };
   }
+
+  // ─── Apple OAuth ──────────────────────────────────────────────────────────
 
   async loginWithApple(
     dto: AppleAuthDto,
@@ -162,6 +166,62 @@ export class AuthService {
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
+  // ─── Profile ──────────────────────────────────────────────────────────────
+
+  async getProfile(userId: string) {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['organizerProfiles'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.sanitizeUser(user);
+  }
+
+  // ─── Refresh Token ────────────────────────────────────────────────────────
+
+  async refreshToken(refreshToken: string) {
+    const token = await this.refreshTokenRepository.findOne({
+      where: { token: refreshToken },
+      relations: ['user'],
+    });
+
+    if (!token || token.expiresAt < new Date()) {
+      // Clean up expired token if it exists
+      if (token) {
+        await this.refreshTokenRepository.delete(token.id);
+      }
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const tokens = await this.generateTokens(token.user.id);
+
+    // Rotate: delete old refresh token
+    await this.refreshTokenRepository.delete(token.id);
+
+    return tokens;
+  }
+
+  // ─── Logout ───────────────────────────────────────────────────────────────
+
+  async logout(refreshToken: string): Promise<{ message: string }> {
+    await this.refreshTokenRepository.delete({ token: refreshToken });
+    return { message: 'Logged out successfully' };
+  }
+
+  /**
+   * Revoke ALL refresh tokens for a user (e.g. "log out all devices").
+   */
+  async logoutAll(userId: string): Promise<{ message: string }> {
+    await this.refreshTokenRepository.delete({ userId });
+    return { message: 'Logged out from all devices' };
+  }
+
+  // ─── Internals ────────────────────────────────────────────────────────────
+
   private async findOrCreateOAuthUser(params: {
     email?: string;
     firstName: string | null;
@@ -172,6 +232,7 @@ export class AuthService {
   }): Promise<User> {
     const { email, firstName, lastName, profileImageUrl, googleId, appleSub } = params;
     let user: User | null = null;
+
     if (googleId) {
       user = await this.usersRepository.findOne({ where: { googleId } });
     }
@@ -181,21 +242,33 @@ export class AuthService {
     if (!user && email) {
       user = await this.usersRepository.findOne({ where: { email } });
     }
+
     if (user) {
+      // Link OAuth identifiers to an existing account
+      let changed = false;
       if (googleId && !user.googleId) {
         user.googleId = googleId;
-        await this.usersRepository.save(user);
+        changed = true;
       }
       if (appleSub && !user.appleSub) {
         user.appleSub = appleSub;
-        if (email && !user.email) user.email = email;
+        if (email && !user.email) {
+          user.email = email;
+        }
+        changed = true;
+      }
+      if (changed) {
         await this.usersRepository.save(user);
       }
       return user;
     }
+
     if (!email) {
-      throw new UnauthorizedException('Apple Sign-In: email is required on first sign-in');
+      throw new UnauthorizedException(
+        'Apple Sign-In: email is required on first sign-in',
+      );
     }
+
     const placeholderHash = await bcrypt.hash(OAUTH_PLACEHOLDER_PASSWORD, 10);
     const newUser = this.usersRepository.create({
       email,
@@ -211,38 +284,6 @@ export class AuthService {
     return newUser;
   }
 
-  async getProfile(userId: string) {
-    const user = await this.usersRepository.findOne({
-      where: { id: userId },
-      relations: ['organizerProfiles'],
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    return this.sanitizeUser(user);
-  }
-
-  async refreshToken(refreshToken: string) {
-    const token = await this.refreshTokenRepository.findOne({
-      where: { token: refreshToken },
-      relations: ['user'],
-    });
-
-    if (!token || token.expiresAt < new Date()) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    // Generate new tokens
-    const tokens = await this.generateTokens(token.user.id);
-
-    // Delete old refresh token
-    await this.refreshTokenRepository.delete(token.id);
-
-    return tokens;
-  }
-
   private async generateTokens(userId: string) {
     const payload = { sub: userId };
 
@@ -253,9 +294,19 @@ export class AuthService {
       expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRATION', '30d'),
     });
 
-    // Save refresh token
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // Limit tokens per user to prevent unbounded growth (keep last 10 devices)
+    const existingTokens = await this.refreshTokenRepository.find({
+      where: { userId },
+      order: { createdAt: 'ASC' },
+    });
+
+    if (existingTokens.length >= 10) {
+      const toDelete = existingTokens.slice(0, existingTokens.length - 9);
+      await this.refreshTokenRepository.remove(toDelete);
+    }
 
     await this.refreshTokenRepository.save({
       userId,
@@ -269,12 +320,20 @@ export class AuthService {
     };
   }
 
+  /**
+   * Strip sensitive fields and compute role correctly.
+   *
+   * BUG FIX: Previously any user with organizerProfiles would be returned as
+   * 'organizer' regardless of their DB role or profile verification status.
+   * Now we trust the DB `role` column as the source of truth; organizer
+   * profiles are included for client-side UI hints but don't override role.
+   */
   private sanitizeUser(user: User) {
-    const { passwordHash, ...rest } = user;
-    const profiles = (rest as any).organizerProfiles;
-    const role: 'user' | 'organizer' | 'admin' = rest.role !== 'user'
-      ? rest.role
-      : profiles?.length ? 'organizer' : 'user';
-    return { ...rest, role };
+    const { passwordHash, ...rest } = user as any;
+    return {
+      ...rest,
+      // Trust the DB role column — do NOT derive from profile presence
+      role: rest.role ?? 'user',
+    };
   }
 }

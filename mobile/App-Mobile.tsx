@@ -6,6 +6,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 
 import { SplashScreen } from './src/screens/SplashScreen-Simple';
+import { RootNavigator } from './src/navigation/RootNavigator';
+import { AuthProvider } from './src/contexts/AuthContext';
 import { theme } from './src/design/theme';
 
 type AppState = 'splash' | 'welcome' | 'main';
@@ -73,27 +75,16 @@ export default function App() {
     );
   }
 
+  // Main app — full navigation with all screens
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NavigationContainer>
-          <View style={styles.container}>
+        <AuthProvider>
+          <NavigationContainer>
+            <RootNavigator />
             <StatusBar style="light" />
-            <View style={styles.mainContent}>
-              <Text style={styles.comingSoon}>🚀</Text>
-              <Text style={styles.comingSoonTitle}>Main App Coming Soon!</Text>
-              <Text style={styles.comingSoonText}>
-                Beautiful screens with professional design are being built...
-              </Text>
-              <TouchableOpacity 
-                style={styles.backButton}
-                onPress={() => setAppState('welcome')}
-              >
-                <Text style={styles.backButtonText}>← Back to Welcome</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </NavigationContainer>
+          </NavigationContainer>
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -161,43 +152,6 @@ const styles = StyleSheet.create({
   getStartedText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  comingSoon: {
-    fontSize: 64,
-    marginBottom: 24,
-  },
-  comingSoonTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  comingSoonText: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  backButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  backButtonText: {
-    color: theme.colors.primary[400],
-    fontSize: 14,
     fontWeight: '600',
   },
 });

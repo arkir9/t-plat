@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+/**
+ * RegisterScreen
+ *
+ * CHANGES FROM ORIGINAL:
+ * Reads returnTo / returnParams from route.params and redirects after
+ * successful registration — same pattern as LoginScreen.
+ */
+
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,469 +15,281 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
-  StatusBar,
   SafeAreaView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { 
-  Button, 
-  Input,
-  Heading2, 
-  Body, 
-  Card,
-  theme 
-} from '../../design/components';
+import { ChevronLeft, Mail, Lock, User, Phone } from 'lucide-react-native';
 import { authService } from '../../services/authService';
-import { signInWithGoogle, signInWithApple } from '../../utils/socialAuth';
+import { registerForPushNotifications } from '../../services/notificationService';
 
-interface RegisterScreenProps {
-  navigation: any;
-}
+const COLORS = {
+  accent: '#8B5CF6',
+  accentLight: '#F3E8FF',
+  surface: '#F9F9F9',
+  border: '#E5E5E5',
+  white: '#FFF',
+  red: '#EF4444',
+  textSecondary: '#666',
+  text: '#111',
+};
 
-export const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+export function RegisterScreen({ navigation, route }: any) {
+  const returnTo: string | undefined = route?.params?.returnTo;
+  const returnParams: any = route?.params?.returnParams;
+
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<'google' | 'apple' | null>(null);
-  
-  const fadeInAnim = useRef(new Animated.Value(0)).current;
-  const slideUpAnim = useRef(new Animated.Value(30)).current;
-  
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeInAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideUpAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
-  
-  const handleInputChange = (field: string, value: string) => {
-    setFormData({ ...formData, [field]: value });
-    if (errors[field]) {
-      setErrors({ ...errors, [field]: '' });
-    }
+
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!firstName.trim()) errs.firstName = 'First name is required';
+    if (!email.trim()) errs.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(email)) errs.email = 'Enter a valid email';
+    if (!password) errs.password = 'Password is required';
+    else if (password.length < 8) errs.password = 'Password must be at least 8 characters';
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
-  
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    
-    if (!formData.fullName.trim()) {
-      newErrors.fullName = 'Full name is required';
-    }
-    
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email';
-    }
-    
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    }
-    
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    }
-    
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-  
+
   const handleRegister = async () => {
-    if (!validateForm()) return;
-    
+    if (!validate()) return;
     setIsLoading(true);
-    
     try {
-      const nameParts = formData.fullName.trim().split(/\s+/);
-      const firstName = nameParts[0] ?? '';
-      const lastName = nameParts.slice(1).join(' ') ?? '';
       await authService.register({
-        email: formData.email,
-        password: formData.password,
-        phone: formData.phone || undefined,
-        firstName,
-        lastName,
+        email: email.trim(),
+        password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim() || undefined,
       });
-      navigation.replace('Main');
+
+      registerForPushNotifications().catch(() => {});
+
+      if (returnTo) {
+        navigation.replace(returnTo, returnParams || {});
+      } else {
+        navigation.replace('MainTabs');
+      }
     } catch (error: any) {
-      const message = error.response?.data?.message || error.message || 'Registration failed';
-      setErrors({ form: message });
+      const msg = error.response?.data?.message || error.message || 'Registration failed';
+      setErrors({ form: msg });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSocialLogin = async (provider: 'Google' | 'Apple') => {
-    if (socialLoading) return;
-    setSocialLoading(provider === 'Google' ? 'google' : 'apple');
-    try {
-      const result = provider === 'Google' ? await signInWithGoogle() : await signInWithApple();
-      if (result.success) {
-        navigation.replace('Main');
-      } else if (result.error !== 'Canceled') {
-        Alert.alert(provider + ' Sign-In', result.error);
-      }
-    } catch (e: any) {
-      Alert.alert(provider + ' Sign-In', e.message || 'Something went wrong.');
-    } finally {
-      setSocialLoading(null);
-    }
-  };
-  
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      
-      {/* Background */}
-      <LinearGradient
-        colors={['#000000', '#1A1A1A']}
-        style={StyleSheet.absoluteFillObject}
-      />
-      
-      {/* Background Orb */}
-      <Animated.View style={[
-        styles.backgroundOrb,
-        {
-          opacity: fadeInAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 0.3],
-          }),
-        },
-      ]}>
-        <LinearGradient
-          colors={[theme.colors.primary[400], theme.colors.primary[600]]}
-          style={StyleSheet.absoluteFillObject}
+  const field = (
+    label: string,
+    value: string,
+    setter: (v: string) => void,
+    key: string,
+    icon: React.ReactNode,
+    props: any = {}
+  ) => (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={[styles.inputRow, errors[key] && styles.inputError]}>
+        {icon}
+        <TextInput
+          style={styles.input}
+          value={value}
+          onChangeText={(v) => {
+            setter(v);
+            if (errors[key]) setErrors(e => ({ ...e, [key]: '' }));
+          }}
+          placeholderTextColor="#AAA"
+          {...props}
         />
-      </Animated.View>
-      
-      <SafeAreaView style={styles.safeArea}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardAvoid}
-        >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Header */}
-            <Animated.View
-              style={[
-                styles.header,
-                {
-                  opacity: fadeInAnim,
-                  transform: [{ translateY: slideUpAnim }],
-                },
-              ]}
-            >
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => navigation.goBack()}
-              >
-                <Body style={styles.backButtonText}>Back</Body>
-              </TouchableOpacity>
-              
-              <View style={styles.headerContent}>
-                <Heading2 style={styles.title}>Create Account</Heading2>
-                <Body style={styles.subtitle}>
-                  Join the plat community and discover amazing events
-                </Body>
-              </View>
-            </Animated.View>
-            
-            {/* Form */}
-            <Animated.View
-              style={[
-                styles.formContainer,
-                {
-                  opacity: fadeInAnim,
-                  transform: [{ translateY: slideUpAnim }],
-                },
-              ]}
-            >
-              <Card variant="glass" style={styles.formCard}>
-                <Input
-                  label="Full Name"
-                  placeholder="Enter your full name"
-                  value={formData.fullName}
-                  onChangeText={(value) => handleInputChange('fullName', value)}
-                  error={errors.fullName}
-                  leftIcon={<Body style={styles.inputIcon}>N</Body>}
-                />
-                
-                <Input
-                  label="Email Address"
-                  placeholder="Enter your email"
-                  value={formData.email}
-                  onChangeText={(value) => handleInputChange('email', value)}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  error={errors.email}
-                  leftIcon={<Body style={styles.inputIcon}>@</Body>}
-                />
-                
-                <Input
-                  label="Phone Number"
-                  placeholder="+254 7XX XXX XXX"
-                  value={formData.phone}
-                  onChangeText={(value) => handleInputChange('phone', value)}
-                  keyboardType="phone-pad"
-                  error={errors.phone}
-                  leftIcon={<Body style={styles.inputIcon}>#</Body>}
-                />
-                
-                <Input
-                  label="Password"
-                  placeholder="Create a strong password"
-                  value={formData.password}
-                  onChangeText={(value) => handleInputChange('password', value)}
-                  secureTextEntry
-                  error={errors.password}
-                  leftIcon={<Body style={styles.inputIcon}>*</Body>}
-                />
-                
-                <Input
-                  label="Confirm Password"
-                  placeholder="Confirm your password"
-                  value={formData.confirmPassword}
-                  onChangeText={(value) => handleInputChange('confirmPassword', value)}
-                  secureTextEntry
-                  error={errors.confirmPassword}
-                  leftIcon={<Body style={styles.inputIcon}>*</Body>}
-                />
-                
-                {errors.form ? (
-                  <Body style={styles.formError}>{errors.form}</Body>
-                ) : null}
-                <Button
-                  title="Create Account"
-                  onPress={handleRegister}
-                  loading={isLoading}
-                  variant="primary"
-                  size="lg"
-                  fullWidth
-                  style={styles.primaryButton}
-                />
-              </Card>
-            </Animated.View>
-            
-            {/* Social Login */}
-            <Animated.View
-              style={[
-                styles.socialContainer,
-                {
-                  opacity: fadeInAnim,
-                  transform: [{ translateY: slideUpAnim }],
-                },
-              ]}
-            >
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Body style={styles.dividerText}>or continue with</Body>
-                <View style={styles.dividerLine} />
-              </View>
-              
-              <View style={styles.socialButtons}>
-                <TouchableOpacity
-                  style={styles.socialButton}
-                  onPress={() => handleSocialLogin('Google')}
-                  disabled={!!socialLoading}
-                >
-                  <BlurView intensity={20} style={styles.socialButtonBlur}>
-                    {socialLoading === 'google' ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Body style={styles.socialIcon}>G</Body>
-                    )}
-                  </BlurView>
-                </TouchableOpacity>
-                
-                {Platform.OS === 'ios' && (
-                  <TouchableOpacity
-                    style={styles.socialButton}
-                    onPress={() => handleSocialLogin('Apple')}
-                    disabled={!!socialLoading}
-                  >
-                    <BlurView intensity={20} style={styles.socialButtonBlur}>
-                      {socialLoading === 'apple' ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Body style={styles.socialIcon}>A</Body>
-                      )}
-                    </BlurView>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </Animated.View>
-            
-            {/* Sign In Link */}
-            <Animated.View
-              style={[
-                styles.signInContainer,
-                {
-                  opacity: fadeInAnim,
-                  transform: [{ translateY: slideUpAnim }],
-                },
-              ]}
-            >
-              <Body style={styles.signInText}>
-                Already have an account?{' '}
-                <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                  <Text style={styles.signInLink}>Sign In</Text>
-                </TouchableOpacity>
-              </Body>
-            </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+      </View>
+      {errors[key] ? <Text style={styles.errorText}>{errors[key]}</Text> : null}
     </View>
   );
-};
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <ChevronLeft size={24} color={COLORS.text} />
+          </TouchableOpacity>
+        </View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.title}>Create account</Text>
+            <Text style={styles.subtitle}>Join Plat — discover events across Africa</Text>
+
+            {returnTo === 'TicketSelection' && (
+              <View style={styles.contextBanner}>
+                <Text style={styles.contextText}>
+                  Create an account to complete your purchase
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.nameRow}>
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>First name</Text>
+                <View style={[styles.inputRow, errors.firstName && styles.inputError]}>
+                  <User size={18} color={COLORS.textSecondary} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="First"
+                    placeholderTextColor="#AAA"
+                    value={firstName}
+                    onChangeText={(v) => {
+                      setFirstName(v);
+                      if (errors.firstName) setErrors(e => ({ ...e, firstName: '' }));
+                    }}
+                    autoCapitalize="words"
+                  />
+                </View>
+                {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
+              </View>
+
+              <View style={[styles.field, { flex: 1 }]}>
+                <Text style={styles.label}>Last name</Text>
+                <View style={styles.inputRow}>
+                  <TextInput
+                    style={[styles.input, { paddingLeft: 4 }]}
+                    placeholder="Last"
+                    placeholderTextColor="#AAA"
+                    value={lastName}
+                    onChangeText={setLastName}
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
+            </View>
+
+            {field('Email', email, setEmail, 'email', <Mail size={18} color={COLORS.textSecondary} />, {
+              placeholder: 'your@email.com',
+              keyboardType: 'email-address',
+              autoCapitalize: 'none',
+              autoCorrect: false,
+            })}
+
+            {field('Phone (optional)', phone, setPhone, 'phone', <Phone size={18} color={COLORS.textSecondary} />, {
+              placeholder: '+254 7XX XXX XXX',
+              keyboardType: 'phone-pad',
+            })}
+
+            {field('Password', password, setPassword, 'password', <Lock size={18} color={COLORS.textSecondary} />, {
+              placeholder: 'At least 8 characters',
+              secureTextEntry: true,
+            })}
+
+            {errors.form ? (
+              <View style={styles.formError}>
+                <Text style={styles.formErrorText}>{errors.form}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.registerBtn, isLoading && { opacity: 0.7 }]}
+              onPress={handleRegister}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.registerBtnText}>Create Account</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.loginRow}>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.replace('Login', { returnTo, returnParams })}>
+                <Text style={styles.loginLink}>Sign in</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Animated.View>
+    </SafeAreaView>
+  );
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  backgroundOrb: {
-    position: 'absolute',
-    width: 400,
-    height: 400,
-    borderRadius: 200,
-    top: -200,
-    right: -150,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  keyboardAvoid: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing['2xl'],
-  },
+  container: { flex: 1, backgroundColor: COLORS.white },
   header: {
-    marginBottom: theme.spacing.xl,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  backBtn: { width: 40, height: 40, justifyContent: 'center' },
+
+  content: { padding: 24, paddingTop: 8, paddingBottom: 48 },
+  title: { fontSize: 26, fontWeight: '800', color: COLORS.text, marginBottom: 6 },
+  subtitle: { fontSize: 15, color: COLORS.textSecondary, marginBottom: 24 },
+
+  contextBanner: {
+    backgroundColor: COLORS.accentLight,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 20,
+  },
+  contextText: { fontSize: 14, color: COLORS.accent, fontWeight: '600', textAlign: 'center' },
+
+  nameRow: { flexDirection: 'row', gap: 12 },
+
+  field: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: COLORS.text, marginBottom: 6 },
+  inputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  backButtonText: {
-    fontSize: 24,
-    color: '#FFFFFF',
-  },
-  headerContent: {
-    alignItems: 'center',
-  },
-  title: {
-    color: '#FFFFFF',
-    marginBottom: theme.spacing.sm,
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'center',
-    paddingHorizontal: theme.spacing.md,
-  },
-  formContainer: {
-    marginBottom: theme.spacing.xl,
-  },
-  formCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    gap: 10,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: COLORS.border,
+    paddingHorizontal: 14,
+    height: 50,
   },
-  inputIcon: {
-    fontSize: 20,
-  },
+  inputError: { borderColor: COLORS.red },
+  input: { flex: 1, fontSize: 15, color: COLORS.text },
+  errorText: { fontSize: 12, color: COLORS.red, marginTop: 4 },
+
   formError: {
-    color: theme.colors.error,
-    marginBottom: theme.spacing.sm,
-    fontSize: 14,
-  },
-  primaryButton: {
-    marginTop: theme.spacing.md,
-  },
-  socialContainer: {
-    marginBottom: theme.spacing.xl,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  dividerText: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 14,
-    marginHorizontal: theme.spacing.md,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: theme.spacing.md,
-  },
-  socialButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    overflow: 'hidden',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: '#FECACA',
   },
-  socialButtonBlur: {
-    flex: 1,
+  formErrorText: { fontSize: 13, color: COLORS.red },
+
+  registerBtn: {
+    backgroundColor: COLORS.accent,
+    paddingVertical: 16,
+    borderRadius: 30,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 20,
   },
-  socialIcon: {
-    fontSize: 24,
-  },
-  signInContainer: {
-    alignItems: 'center',
-  },
-  signInText: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 14,
-  },
-  signInLink: {
-    color: theme.colors.primary[400],
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  registerBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  loginRow: { flexDirection: 'row', justifyContent: 'center' },
+  loginText: { fontSize: 14, color: COLORS.textSecondary },
+  loginLink: { fontSize: 14, color: COLORS.accent, fontWeight: '700' },
 });

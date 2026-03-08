@@ -12,10 +12,12 @@ import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { MainTabNavigator } from './MainTabNavigator';
 import { EventDetailScreen } from '../screens/events/EventDetailScreen';
+import { EventReviewsScreen } from '../screens/events/EventReviewsScreen';
 import { TicketSelectionScreen } from '../screens/tickets/TicketSelectionScreen';
 import { CheckoutScreen } from '../screens/tickets/CheckoutScreen';
 import { SuccessScreen } from '../screens/tickets/SuccessScreen';
 import { TicketDetailScreen } from '../screens/tickets/TicketDetailScreen';
+import { RefundRequestScreen } from '../screens/tickets/RefundRequestScreen'; // ← NEW
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { SettingsScreen } from '../screens/profile/SettingsScreen';
 import { FavoritesScreen } from '../screens/profile/FavoritesScreen';
@@ -34,12 +36,13 @@ import { CheckInScannerScreen } from '../screens/profile/CheckInScannerScreen';
 
 export type RootStackParamList = {
   Welcome: undefined;
-  Login: undefined;
-  Register: undefined;
+  Login: { returnTo?: string; returnParams?: Record<string, any> } | undefined;
+  Register: { returnTo?: string; returnParams?: Record<string, any> } | undefined;
   Onboarding: undefined;
   ForgotPassword: undefined;
-  MainTabs: undefined;
+  MainTabs: { screen?: string } | undefined;
   EventDetail: { eventId: string; event?: any };
+  EventReviews: { eventId: string; event?: any };
   TicketSelection: { eventId: string; event?: any };
   Checkout: {
     eventId: string;
@@ -55,6 +58,7 @@ export type RootStackParamList = {
   };
   Success: { orderId: string; order?: any; eventTitle?: string };
   TicketDetail: { ticketId: string; ticket?: any };
+  RefundRequest: { ticketId: string; ticket?: any }; // ← NEW
   Profile: undefined;
   Settings: undefined;
   Favorites: undefined;
@@ -113,13 +117,15 @@ export const RootNavigator = () => {
         // App Stack
         <Stack.Group>
           <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-          
+
           {/* Event & Ticketing Flow */}
           <Stack.Screen name="EventDetail" component={EventDetailScreen} />
+          <Stack.Screen name="EventReviews" component={EventReviewsScreen} />
           <Stack.Screen name="TicketSelection" component={TicketSelectionScreen} />
           <Stack.Screen name="Checkout" component={CheckoutScreen} />
           <Stack.Screen name="Success" component={SuccessScreen} options={{ gestureEnabled: false }} />
           <Stack.Screen name="TicketDetail" component={TicketDetailScreen} />
+          <Stack.Screen name="RefundRequest" component={RefundRequestScreen} /> {/* ← NEW */}
 
           {/* Profile & Settings */}
           <Stack.Screen name="Profile" component={ProfileScreen} />

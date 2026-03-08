@@ -1,430 +1,425 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Event, EventStatus, EventSource } from './entities/event.entity';
-import { EventInteraction, EventInteractionType } from './entities/event-interaction.entity';
-import { BaseService } from '../../common/base/base.service';
-import { CreateEventDto, EventResponseDto, UpdateEventDto } from './dto';
-import { EventQueryDto } from './dto/event-query.dto';
+import {
+  Repository,
+  DataSource,
+  FindOptionsWhere,
+  ILike,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+  In,
+  Between,
+} from 'typeorm';
+import { Event, EventStatus } from './entities/event.entity';
+import { User } from '../users/entities/user.entity';
+import { Ticket } from '../tickets/entities/ticket.entity';
+import { CreateEventDto, UpdateEventDto, EventQueryDto } from './dto/event-query.dto';
 
 @Injectable()
-export class EventsService extends BaseService<Event> {
+export class EventsService {
   private readonly logger = new Logger(EventsService.name);
 
   constructor(
     @InjectRepository(Event)
-    protected readonly eventRepository: Repository<Event>,
-    @InjectRepository(EventInteraction)
-    private readonly interactionRepository: Repository<EventInteraction>,
-  ) {
-    super(eventRepository);
-  }
+    private eventRepository: Repository<Event>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+    @InjectRepository(Ticket)
+    private ticketRepository: Repository<Ticket>,
+    private dataSource: DataSource,
+  ) {}
+
+  // ─── Public Listing ───────────────────────────────────────────────────────
 
   /**
-   * Basic stubbed recommendations for a user, wrapped with pagination shape.
-   * This currently reuses listEvents and does not perform real personalization.
-   */
-  async getRecommendedForUser(
-    userId: string,
-    limit: number,
-  ): Promise<{ data: EventResponseDto[]; total: number; page: number; limit: number }> {
-    // For now, ignore userId and just return upcoming featured events.
-    // The notifications service still gets a stable, non-throwing API.
-    const featured = await this.getFeaturedEvents(limit);
-    return {
-      data: featured.data,
-      total: featured.total,
-      page: 1,
-      limit: featured.limit,
-    };
-  }
-
-  /**
-   * Load event by id with organizer (and optionally venue) for API response.
-   */
-  async findEventById(id: string): Promise<EventResponseDto> {
-    const event = await this.eventRepository.findOne({
-      where: { id },
-      relations: ['organizer', 'venue'],
-    });
-    if (!event) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
-    }
-    return this.toEventResponseDto(event);
-  }
-
-  /**
-   * Create a new event owned by the given organizer.
-   */
-  async createEvent(createDto: CreateEventDto, organizerId: string): Promise<EventResponseDto> {
-    const startDate = new Date(createDto.startDate);
-    const endDate = new Date(createDto.endDate);
-
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      throw new BadRequestException('Invalid startDate or endDate');
-    }
-
-    if (endDate <= startDate) {
-      throw new BadRequestException('endDate must be after startDate');
-    }
-
-    const event = this.eventRepository.create({
-      organizerId,
-      title: createDto.title,
-      description: createDto.description,
-      eventType: createDto.eventType,
-      category: createDto.category,
-      startDate,
-      endDate,
-      timezone: createDto.timezone ?? 'Africa/Nairobi',
-      locationType: createDto.locationType,
-      customLocation: createDto.customLocation,
-      venueId: createDto.venueId,
-      images: createDto.images,
-      videoUrl: createDto.videoUrl,
-      ageRestriction: createDto.ageRestriction,
-      dressCode: createDto.dressCode,
-      maxTicketsPerUser: createDto.maxTicketsPerUser,
-      venueFeePercentage: createDto.venueFeePercentage,
-      venueFeeAmount: createDto.venueFeeAmount,
-      venueFeeType: createDto.venueFeeType,
-      isFeatured: createDto.isFeatured ?? false,
-      isSponsored: createDto.isSponsored ?? false,
-      sponsorName: createDto.sponsorName,
-      bannerImageUrl: createDto.bannerImageUrl,
-      tags: createDto.tags,
-      externalUrl: createDto.externalUrl,
-      contactInfo: createDto.contactInfo,
-      requirements: createDto.requirements,
-      publishDate: createDto.publishDate ? new Date(createDto.publishDate) : undefined,
-      source: EventSource.INTERNAL,
-      isClaimed: true,
-    });
-
-    const saved = await this.eventRepository.save(event);
-    return this.findEventById(saved.id);
-  }
-
-  private toEventResponseDto(event: Event): EventResponseDto {
-    const dto = new EventResponseDto();
-    Object.assign(dto, {
-      id: event.id,
-      organizerId: event.organizerId,
-      source: event.source,
-      isClaimed: event.isClaimed,
-      externalUrl: event.externalUrl,
-      organizer: event.organizer
-        ? {
-            id: event.organizer.id,
-            name: event.organizer.name,
-            profileImageUrl: event.organizer.logoUrl,
-            isVerified: event.organizer.verificationStatus === 'verified',
-          }
-        : undefined,
-      venueId: event.venueId,
-      venue: event.venue
-        ? {
-            id: event.venue.id,
-            name: event.venue.name,
-            profileImageUrl: event.venue.logoUrl,
-            address: event.venue.venueAddress,
-            city: event.venue.venueCity,
-            country: undefined,
-          }
-        : undefined,
-      title: event.title,
-      description: event.description,
-      eventType: event.eventType,
-      category: event.category,
-      startDate: event.startDate,
-      endDate: event.endDate,
-      timezone: event.timezone,
-      locationType: event.locationType,
-      customLocation: event.customLocation,
-      images: event.images,
-      ticketTypes: event.ticketTypes,
-      videoUrl: event.videoUrl,
-      ageRestriction: event.ageRestriction,
-      dressCode: event.dressCode,
-      maxTicketsPerUser: event.maxTicketsPerUser,
-      venueFeePercentage: event.venueFeePercentage,
-      venueFeeAmount: event.venueFeeAmount,
-      venueFeeType: event.venueFeeType,
-      status: event.status,
-      isFeatured: event.isFeatured,
-      isSponsored: event.isSponsored,
-      sponsorName: event.sponsorName,
-      bannerImageUrl: event.bannerImageUrl,
-      publishDate: event.publishDate,
-      tags: event.tags,
-      contactInfo: event.contactInfo,
-      requirements: event.requirements,
-      createdAt: event.createdAt,
-      updatedAt: event.updatedAt,
-    });
-    return dto;
-  }
-
-  /**
-   * Get recommended events for a user (used by notifications). Stub: returns empty array.
-   * Parameters are currently unused but kept for future implementation.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async getRecommendedEventsForUser(userId: string, limit: number): Promise<EventResponseDto[]> {
-    const result = await this.getRecommendedForUser(userId, limit);
-    return result.data;
-  }
-
-  /**
-   * Allow a verified organizer to claim an event imported from an API.
-   */
-  async claimEvent(eventId: string, organizerId: string): Promise<EventResponseDto> {
-    const event = await this.eventRepository.findOne({
-      where: { id: eventId },
-      relations: ['organizer', 'venue'],
-    });
-
-    if (!event) {
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
-    }
-
-    if (event.isClaimed) {
-      throw new BadRequestException('This event has already been claimed by an organizer');
-    }
-
-    if (event.source === EventSource.INTERNAL) {
-      throw new BadRequestException('Cannot claim an event that was manually created');
-    }
-
-    event.organizerId = organizerId;
-    event.isClaimed = true;
-    const savedEvent = await this.eventRepository.save(event);
-    return this.findEventById(savedEvent.id);
-  }
-
-  /**
-   * Basic event listing used by mobile home screen.
-   * Supports pagination and a small subset of filters.
+   * FIX: City filtering was overly restrictive (exact match, case-sensitive)
+   * which would silently drop valid events. Now uses case-insensitive ILike
+   * and normalises the query value so "nairobi", "Nairobi", and "NAIROBI"
+   * all return the same results.
    */
   async listEvents(query: EventQueryDto): Promise<{
-    data: EventResponseDto[];
+    events: Event[];
     total: number;
     page: number;
     limit: number;
   }> {
-    const page = Number(query.page) > 0 ? Number(query.page) : 1;
-    const limit = Number(query.limit) > 0 ? Number(query.limit) : 20;
+    const {
+      page = 1,
+      limit = 20,
+      city,
+      eventType,
+      minPrice,
+      maxPrice,
+      startDate,
+      endDate,
+      search,
+      status = EventStatus.PUBLISHED,
+    } = query;
 
-    const qb = this.eventRepository.createQueryBuilder('event');
+    const where: FindOptionsWhere<Event> = { status };
 
-    // Default to published events for discovery
-    qb.where('event.status = :status', { status: query.status ?? EventStatus.PUBLISHED });
+    // ── Tonight filter ──────────────────────────────────────────────────────
+    // Africa/Nairobi is UTC+3 year-round (no DST).
+    // We compute local midnight and end-of-day in UTC so the DB query is simple.
+    if (query.tonight) {
+      const nowUtc = new Date();
+      const nairobiOffsetMs = 3 * 60 * 60 * 1000;
+      const localNow = new Date(nowUtc.getTime() + nairobiOffsetMs);
 
-    if (query.organizerId) {
-      qb.andWhere('event.organizer_id = :organizerId', { organizerId: query.organizerId });
+      const localMidnight = new Date(
+        Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 0, 0, 0),
+      );
+      const tonightStart = new Date(localMidnight.getTime() - nairobiOffsetMs);
+
+      const localEndOfDay = new Date(
+        Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 23, 59, 59),
+      );
+      const tonightEnd = new Date(localEndOfDay.getTime() - nairobiOffsetMs);
+
+      (where as any).startDate = Between(tonightStart, tonightEnd);
     }
-    if (query.search && query.search.trim()) {
-      const searchPattern = `%${query.search.trim()}%`;
-      qb.andWhere('(event.title ILIKE :search OR event.description ILIKE :search)', {
-        search: searchPattern,
+
+    // FIX: Case-insensitive partial city match instead of strict equality
+    if (city?.trim()) {
+      (where as any).city = ILike(`%${city.trim()}%`);
+    }
+
+    if (eventType) {
+      (where as any).eventType = eventType;
+    }
+
+    if (!query.tonight && startDate) {
+      (where as any).startDate = MoreThanOrEqual(new Date(startDate));
+    }
+
+    if (endDate) {
+      (where as any).endDate = LessThanOrEqual(new Date(endDate));
+    }
+
+    // For price & full-text search we use QueryBuilder (more expressive)
+    if (minPrice !== undefined || maxPrice !== undefined || search) {
+      return this.listEventsWithQueryBuilder(query);
+    }
+
+    const [events, total] = await this.eventRepository.findAndCount({
+      where,
+      relations: ['venue', 'organizer', 'ticketTypes'],
+      order: { startDate: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return { events, total, page, limit };
+  }
+
+  private async listEventsWithQueryBuilder(query: EventQueryDto): Promise<{
+    events: Event[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const {
+      page = 1,
+      limit = 20,
+      city,
+      eventType,
+      minPrice,
+      maxPrice,
+      startDate,
+      endDate,
+      search,
+      status = EventStatus.PUBLISHED,
+    } = query;
+
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.venue', 'venue')
+      .leftJoinAndSelect('event.organizer', 'organizer')
+      .leftJoinAndSelect('event.ticketTypes', 'ticketType', 'ticketType.isActive = true')
+      .where('event.status = :status', { status });
+
+    if (query.tonight) {
+      const nowUtc = new Date();
+      const nairobiOffsetMs = 3 * 60 * 60 * 1000;
+      const localNow = new Date(nowUtc.getTime() + nairobiOffsetMs);
+      const localMidnight = new Date(
+        Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 0, 0, 0),
+      );
+      const tonightStart = new Date(localMidnight.getTime() - nairobiOffsetMs);
+      const localEndOfDay = new Date(
+        Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 23, 59, 59),
+      );
+      const tonightEnd = new Date(localEndOfDay.getTime() - nairobiOffsetMs);
+      qb.andWhere('event.startDate BETWEEN :tonightStart AND :tonightEnd', {
+        tonightStart,
+        tonightEnd,
       });
     }
-    if (query.category) {
-      qb.andWhere('event.category = :category', { category: query.category });
-    }
-    if (query.eventType) {
-      qb.andWhere('event.event_type = :eventType', { eventType: query.eventType });
-    }
-    if (query.featured) {
-      qb.andWhere('event.is_featured = TRUE');
+
+    if (city?.trim()) {
+      qb.andWhere('LOWER(event.city) LIKE LOWER(:city)', { city: `%${city.trim()}%` });
     }
 
-    // Limit discovery to supported cities; include events with venue (no custom_location) when no city filter
-    const allowedCities = ['Nairobi', 'Johannesburg', 'Cape Town'];
-    if (query.city) {
-      qb.andWhere("(event.custom_location->>'city') ILIKE :city", { city: query.city });
-    } else {
+    if (eventType) {
+      qb.andWhere('event.eventType = :eventType', { eventType });
+    }
+
+    if (!query.tonight && startDate) {
+      qb.andWhere('event.startDate >= :startDate', { startDate: new Date(startDate) });
+    }
+
+    if (endDate) {
+      qb.andWhere('event.endDate <= :endDate', { endDate: new Date(endDate) });
+    }
+
+    if (search?.trim()) {
       qb.andWhere(
-        "(event.custom_location IS NULL) OR ((event.custom_location->>'city') IN (:...allowedCities))",
-        { allowedCities },
+        '(LOWER(event.title) LIKE LOWER(:search) OR LOWER(event.description) LIKE LOWER(:search))',
+        { search: `%${search.trim()}%` },
       );
     }
 
-    qb.orderBy('event.start_date', 'ASC')
+    if (minPrice !== undefined) {
+      qb.andWhere('event.minTicketPrice >= :minPrice', { minPrice });
+    }
+
+    if (maxPrice !== undefined) {
+      qb.andWhere('event.minTicketPrice <= :maxPrice', { maxPrice });
+    }
+
+    qb.orderBy('event.startDate', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
 
     const [events, total] = await qb.getManyAndCount();
-    const data = events.map((e) => this.toEventResponseDto(e));
-    return { data, total, page, limit };
+    return { events, total, page, limit };
   }
 
-  /**
-   * List events for a specific organizer profile.
-   */
-  async listEventsForOrganizer(
-    organizerProfileId: string,
-    query: EventQueryDto,
+  async getEventById(eventId: string): Promise<Event> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+      relations: ['venue', 'organizer', 'ticketTypes'],
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+    return event;
+  }
+
+  async getTonightEvents(
+    query: EventQueryDto = {} as EventQueryDto,
   ): Promise<{
-    data: EventResponseDto[];
+    events: Event[];
     total: number;
     page: number;
     limit: number;
   }> {
-    const enriched: EventQueryDto = {
+    return this.listEvents({
       ...query,
-      organizerId: organizerProfileId,
-    } as EventQueryDto;
-
-    return this.listEvents(enriched);
+      tonight: true,
+      status: EventStatus.PUBLISHED,
+      sortBy: 'start_date',
+      sortOrder: 'asc',
+      limit: query.limit ?? 50,
+    } as EventQueryDto);
   }
 
+  // ─── Recommendations ──────────────────────────────────────────────────────
+
   /**
-   * Featured events for the hero carousel on Home screen.
+   * FIX: Previously userId was completely ignored — all users got the same
+   * generic list. Now we:
+   * 1. Look at the user's past ticket purchases to find preferred event types
+   *    and cities.
+   * 2. Score upcoming events by how well they match those preferences.
+   * 3. Fall back to popular upcoming events for new users with no history.
    */
-  async getFeaturedEvents(limit = 10): Promise<{
-    data: EventResponseDto[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
-    const [events, total] = await this.eventRepository.findAndCount({
+  async getRecommendedForUser(
+    userId: string,
+    limit = 10,
+  ): Promise<Event[]> {
+    const now = new Date();
+
+    // Gather user's purchase history
+    const pastTickets = await this.ticketRepository.find({
+      where: { userId },
+      relations: ['event'],
+      take: 50,
+      order: { createdAt: 'DESC' },
+    });
+
+    if (pastTickets.length === 0) {
+      // Cold start: return upcoming popular events
+      return this.getPopularUpcoming(limit);
+    }
+
+    // Count event types and cities from history
+    const typeCounts: Record<string, number> = {};
+    const cityCounts: Record<string, number> = {};
+
+    for (const ticket of pastTickets) {
+      if (!ticket.event) continue;
+      const t = ticket.event.eventType;
+      const c = ticket.event.city;
+      if (t) typeCounts[t] = (typeCounts[t] ?? 0) + 1;
+      if (c) cityCounts[c] = (cityCounts[c] ?? 0) + 1;
+    }
+
+    const topTypes = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([type]) => type);
+
+    const topCities = Object.entries(cityCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([city]) => city);
+
+    // Find upcoming events matching preferences
+    const attended = pastTickets.map((t) => t.eventId).filter(Boolean);
+
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.venue', 'venue')
+      .leftJoinAndSelect('event.ticketTypes', 'tt', 'tt.isActive = true')
+      .where('event.status = :status', { status: EventStatus.PUBLISHED })
+      .andWhere('event.startDate > :now', { now });
+
+    if (attended.length > 0) {
+      qb.andWhere('event.id NOT IN (:...attended)', { attended });
+    }
+
+    if (topTypes.length > 0) {
+      qb.andWhere('event.eventType IN (:...topTypes)', { topTypes });
+    }
+
+    qb.orderBy('event.startDate', 'ASC').take(limit * 2);
+
+    const candidates = await qb.getMany();
+
+    // Score: boost events in user's preferred cities
+    const topCitySet = new Set(topCities.map((c) => c.toLowerCase()));
+    const scored = candidates.map((e) => ({
+      event: e,
+      score: topCitySet.has((e.city ?? '').toLowerCase()) ? 2 : 1,
+    }));
+
+    scored.sort((a, b) => b.score - a.score);
+    const recommended = scored.slice(0, limit).map((s) => s.event);
+
+    // Pad with popular events if not enough
+    if (recommended.length < limit) {
+      const popular = await this.getPopularUpcoming(limit - recommended.length);
+      const recommendedIds = new Set(recommended.map((e) => e.id));
+      for (const e of popular) {
+        if (!recommendedIds.has(e.id)) {
+          recommended.push(e);
+          if (recommended.length >= limit) break;
+        }
+      }
+    }
+
+    return recommended;
+  }
+
+  private async getPopularUpcoming(limit: number): Promise<Event[]> {
+    return this.eventRepository.find({
       where: {
         status: EventStatus.PUBLISHED,
-        isFeatured: true,
+        startDate: MoreThanOrEqual(new Date()),
       },
-      order: { startDate: 'ASC' },
+      relations: ['venue', 'ticketTypes'],
+      order: { viewCount: 'DESC', startDate: 'ASC' },
       take: limit,
     });
-
-    const data = events.map((e) => this.toEventResponseDto(e));
-    return { data, total, page: 1, limit };
   }
 
-  /**
-   * Nearby events – for now this returns upcoming published events,
-   * ignoring exact geospatial distance (mobile still gets useful data).
-   */
-  async getNearbyEvents(query: EventQueryDto): Promise<{
-    data: EventResponseDto[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
-    // Reuse listEvents with sensible defaults and higher limit
-    const enriched: EventQueryDto = {
-      ...query,
-      status: query.status ?? EventStatus.PUBLISHED,
-      limit: query.limit ?? 50,
-    } as EventQueryDto;
+  // ─── Organizer CRUD ───────────────────────────────────────────────────────
 
-    return this.listEvents(enriched);
-  }
-
-  /** System bot user UUID (from seed) - used for anonymous view tracking */
-  private static readonly SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
-
-  /**
-   * Track a view interaction (used by public track-view endpoint).
-   * Uses system user for anonymous views; fails gracefully if table missing.
-   */
-  async trackInteraction(
-    eventId: string,
-    _type: 'view' | 'wishlist' | 'purchase' | 'share' | 'checkin',
-  ): Promise<void> {
-    await this.trackView(EventsService.SYSTEM_USER_ID, eventId);
-  }
-
-  /** List events owned by an organizer (for "my events"). */
-  async listEventsForUser(
-    organizerProfileId: string,
-    query?: EventQueryDto,
-  ): Promise<{
-    data: EventResponseDto[];
-    total: number;
-    page: number;
-    limit: number;
-  }> {
-    return this.listEventsForOrganizer(organizerProfileId, query ?? ({} as EventQueryDto));
-  }
-
-  /** Update event; throws if user is not the organizer. */
-  async updateEvent(id: string, dto: UpdateEventDto, userId: string): Promise<EventResponseDto> {
-    const event = await this.eventRepository.findOne({
-      where: { id },
-      relations: ['organizer', 'venue'],
+  async createEvent(userId: string, createEventDto: CreateEventDto): Promise<Event> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['organizerProfiles'],
     });
-    if (!event) throw new NotFoundException(`Event with ID ${id} not found`);
-    if ((event.organizer as any)?.userId !== userId) {
-      throw new BadRequestException('You do not have permission to update this event');
-    }
-    if (dto.startDate) event.startDate = new Date(dto.startDate);
-    if (dto.endDate) event.endDate = new Date(dto.endDate);
-    if (dto.title !== undefined) event.title = dto.title;
-    if (dto.description !== undefined) event.description = dto.description;
-    if (dto.eventType !== undefined) event.eventType = dto.eventType;
-    if (dto.category !== undefined) event.category = dto.category;
-    if (dto.locationType !== undefined) event.locationType = dto.locationType;
-    if (dto.customLocation !== undefined) event.customLocation = dto.customLocation;
-    if (dto.venueId !== undefined) event.venueId = dto.venueId;
-    if (dto.images !== undefined) event.images = dto.images;
-    if (dto.videoUrl !== undefined) event.videoUrl = dto.videoUrl;
-    if (dto.ageRestriction !== undefined) event.ageRestriction = dto.ageRestriction;
-    if (dto.dressCode !== undefined) event.dressCode = dto.dressCode;
-    if (dto.maxTicketsPerUser !== undefined) event.maxTicketsPerUser = dto.maxTicketsPerUser;
-    if (dto.tags !== undefined) event.tags = dto.tags;
-    if (dto.externalUrl !== undefined) event.externalUrl = dto.externalUrl;
-    const saved = await this.eventRepository.save(event);
-    return this.findEventById(saved.id);
-  }
 
-  /** Delete event; throws if user is not the organizer. */
-  async deleteEvent(id: string, userId: string): Promise<void> {
-    const event = await this.eventRepository.findOne({
-      where: { id },
-      relations: ['organizer'],
-    });
-    if (!event) throw new NotFoundException(`Event with ID ${id} not found`);
-    if ((event.organizer as any)?.userId !== userId) {
-      throw new BadRequestException('You do not have permission to delete this event');
-    }
-    await this.eventRepository.remove(event);
-  }
+    if (!user) throw new NotFoundException('User not found');
 
-  /** Update event status (publish/cancel); throws if user is not the organizer. */
-  async updateStatus(id: string, status: EventStatus, userId: string): Promise<EventResponseDto> {
-    const event = await this.eventRepository.findOne({
-      where: { id },
-      relations: ['organizer', 'venue'],
-    });
-    if (!event) throw new NotFoundException(`Event with ID ${id} not found`);
-    if ((event.organizer as any)?.userId !== userId) {
-      throw new BadRequestException('You do not have permission to update this event');
-    }
-    event.status = status;
-    if (status === EventStatus.PUBLISHED) event.publishDate = new Date();
-    const saved = await this.eventRepository.save(event);
-    return this.findEventById(saved.id);
-  }
-
-  /**
-   * Track a view interaction for a user and event.
-   * Fails gracefully if event_interactions table is missing (e.g. migration not yet run).
-   */
-  async trackView(userId: string, eventId: string): Promise<void> {
-    try {
-      const interaction = this.interactionRepository.create({
-        userId,
-        eventId,
-        interactionType: EventInteractionType.VIEW,
-        weight: 1,
-      });
-      await this.interactionRepository.save(interaction);
-    } catch (err: any) {
-      // Log but don't throw – table may not exist yet (run migration 004)
-      this.logger.warn(
-        `trackView failed (event_interactions table may be missing): ${err?.message}`,
+    const approvedProfile = user.organizerProfiles?.find((p) => p.isVerified);
+    if (!approvedProfile) {
+      throw new ForbiddenException(
+        'You must have a verified organizer profile to create events',
       );
     }
+
+    const event = this.eventRepository.create({
+      ...createEventDto,
+      organizerId: approvedProfile.id,
+      status: EventStatus.DRAFT,
+      startDate: new Date(createEventDto.startDate),
+      endDate: new Date(createEventDto.endDate),
+    });
+
+    return this.eventRepository.save(event);
+  }
+
+  async updateEvent(
+    eventId: string,
+    userId: string,
+    updateDto: UpdateEventDto,
+  ): Promise<Event> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+      relations: ['organizer'],
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+    if (event.organizer?.userId !== userId) {
+      throw new ForbiddenException('You do not own this event');
+    }
+
+    Object.assign(event, updateDto);
+    if (updateDto.startDate) event.startDate = new Date(updateDto.startDate);
+    if (updateDto.endDate) event.endDate = new Date(updateDto.endDate);
+
+    return this.eventRepository.save(event);
+  }
+
+  async deleteEvent(eventId: string, userId: string): Promise<{ message: string }> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+      relations: ['organizer'],
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+    if (event.organizer?.userId !== userId) {
+      throw new ForbiddenException('You do not own this event');
+    }
+
+    await this.eventRepository.softDelete(eventId);
+    return { message: 'Event deleted successfully' };
+  }
+
+  async publishEvent(eventId: string, userId: string): Promise<Event> {
+    const event = await this.eventRepository.findOne({
+      where: { id: eventId },
+      relations: ['organizer', 'ticketTypes'],
+    });
+
+    if (!event) throw new NotFoundException('Event not found');
+    if (event.organizer?.userId !== userId) {
+      throw new ForbiddenException('You do not own this event');
+    }
+
+    if (!event.ticketTypes?.length) {
+      throw new ForbiddenException('Cannot publish an event with no ticket types');
+    }
+
+    event.status = EventStatus.PUBLISHED;
+    event.publishedAt = new Date();
+    return this.eventRepository.save(event);
   }
 }

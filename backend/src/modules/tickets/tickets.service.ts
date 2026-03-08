@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
@@ -28,6 +29,7 @@ import {
 
 @Injectable()
 export class TicketsService {
+  private readonly logger = new Logger(TicketsService.name);
   private readonly PLATFORM_COMMISSION_PERCENTAGE = 5.0;
 
   constructor(
@@ -53,9 +55,8 @@ export class TicketsService {
     private configService: ConfigService,
   ) {}
 
-  /**
-   * Create ticket types for an event
-   */
+  // ─── Ticket Types ─────────────────────────────────────────────────────────
+
   async createTicketTypes(
     eventId: string,
     userId: string,
@@ -63,215 +64,108 @@ export class TicketsService {
   ): Promise<TicketType[]> {
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
-      relations: ['organizer', 'organizer.user'],
+      relations: ['organizer'],
     });
 
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    if (!event) throw new NotFoundException('Event not found');
 
-    // Check if user is the organizer (via organizer profile)
     if (!event.organizer || event.organizer.userId !== userId) {
       throw new ForbiddenException(
         'You do not have permission to create ticket types for this event',
       );
     }
 
-    const createdTicketTypes = ticketTypes.map((dto) =>
+    const created = ticketTypes.map((dto) =>
       this.ticketTypeRepository.create({
         ...dto,
         eventId,
-        currency: dto.currency || Currency.KES,
+        currency: dto.currency ?? Currency.KES,
         isActive: dto.isActive ?? true,
-        saleStartDate: dto.saleStartDate ? new Date(dto.saleStartDate) : null,
-        saleEndDate: dto.saleEndDate ? new Date(dto.saleEndDate) : null,
+        saleStartDate: dto.saleStartDate ? new Date(dto.saleStartDate) : undefined,
+        saleEndDate: dto.saleEndDate ? new Date(dto.saleEndDate) : undefined,
       }),
     );
 
-    return this.ticketTypeRepository.save(createdTicketTypes);
+    return this.ticketTypeRepository.save(created);
   }
 
-  /**
-   * Get ticket types for an event
-   */
   async getTicketTypes(eventId: string): Promise<any[]> {
     const event = await this.eventRepository.findOne({ where: { id: eventId } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    if (!event) throw new NotFoundException('Event not found');
 
     const types = await this.ticketTypeRepository.find({
       where: { eventId, isActive: true },
       order: { price: 'ASC' },
     });
-    return types.map((tt) => ({
-      id: tt.id,
-      eventId: tt.eventId,
-      name: tt.name,
-      description: tt.description,
-      price: Number(tt.price),
-      currency: tt.currency,
-      quantityAvailable: tt.quantityAvailable,
-      quantitySold: tt.quantitySold,
-      availableQuantity: tt.quantityAvailable - tt.quantitySold,
-      isActive: tt.isActive,
-    }));
+
+    return types.map((tt) => this.mapTicketTypeToDto(tt));
   }
 
-  /**
-   * Generate a cryptographically signed QR payload.
-   * The payload encodes ticket_id + event_id + an HMAC signature so that
-   * the check-in endpoint can verify authenticity without a DB round-trip
-   * for the hash itself.
-   */
-  private generateQRPayload(ticketId: string, eventId: string): {
-    qrCode: string;
-    qrCodeHash: string;
-  } {
-    const secret =
-      this.configService.get<string>('QR_HMAC_SECRET') || 'tplat-qr-default-secret';
-    const message = `${ticketId}:${eventId}`;
-    const hmac = crypto
-      .createHmac('sha256', secret)
-      .update(message)
-      .digest('hex');
+  // ─── Orders ───────────────────────────────────────────────────────────────
 
-    const qrCode = JSON.stringify({ t: ticketId, e: eventId, sig: hmac });
-    return { qrCode, qrCodeHash: hmac };
-  }
-
-  /**
-   * Verify a QR payload signature (used at check-in).
-   */
-  verifyQRPayload(ticketId: string, eventId: string, signature: string): boolean {
-    const secret =
-      this.configService.get<string>('QR_HMAC_SECRET') || 'tplat-qr-default-secret';
-    const expected = crypto
-      .createHmac('sha256', secret)
-      .update(`${ticketId}:${eventId}`)
-      .digest('hex');
-    return crypto.timingSafeEqual(
-      Buffer.from(expected, 'hex'),
-      Buffer.from(signature, 'hex'),
-    );
-  }
-
-  /**
-   * Generate unique order number
-   */
-  private generateOrderNumber(): string {
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `ORD-${timestamp}-${random}`;
-  }
-
-  /**
-   * Calculate order totals including commissions
-   */
-  private calculateOrderTotals(
-    subtotal: number,
-    venueFeePercentage?: number,
-    venueFeeFixed?: number,
-  ): {
-    subtotal: number;
-    platformCommission: number;
-    venueFee: number;
-    total: number;
-    netAmount: number;
-  } {
-    const platformCommission = (subtotal * this.PLATFORM_COMMISSION_PERCENTAGE) / 100;
-    const venueFee = venueFeePercentage
-      ? (subtotal * venueFeePercentage) / 100
-      : venueFeeFixed || 0;
-    const total = subtotal + platformCommission;
-    const netAmount = subtotal - venueFee;
-
-    return {
-      subtotal,
-      platformCommission,
-      venueFee,
-      total,
-      netAmount,
-    };
-  }
-
-  /**
-   * Create an order and tickets
-   */
   async createOrder(userId: string, createOrderDto: CreateOrderDto): Promise<Order> {
     const { eventId, items, paymentMethod, phoneNumber } = createOrderDto;
 
-    // Validate event exists
     const event = await this.eventRepository.findOne({
       where: { id: eventId },
       relations: ['organizer', 'venue'],
     });
+    if (!event) throw new NotFoundException('Event not found');
 
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
-
-    // Validate M-Pesa phone number if needed
     if (paymentMethod === PaymentMethod.MPESA && !phoneNumber) {
       throw new BadRequestException('Phone number is required for M-Pesa payments');
     }
 
-    // Use transaction to ensure data consistency
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Validate ticket types and availability
-      const ticketTypeIds = items.map((item) => item.ticketTypeId);
+      // Lock & fetch ticket types within the transaction to prevent overselling
+      const ticketTypeIds = items.map((i) => i.ticketTypeId);
       const ticketTypes = await queryRunner.manager.find(TicketType, {
-        where: {
-          id: In(ticketTypeIds),
-          eventId,
-        },
+        where: { id: In(ticketTypeIds), eventId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (ticketTypes.length !== items.length) {
-        throw new NotFoundException('One or more ticket types not found');
+        throw new NotFoundException('One or more ticket types not found for this event');
       }
 
-      // Calculate subtotal and validate availability
       let subtotal = 0;
-      const orderItems: OrderItem[] = [];
+      const orderItemDrafts: Partial<OrderItem>[] = [];
 
       for (const item of items) {
         const ticketType = ticketTypes.find((tt) => tt.id === item.ticketTypeId);
-        if (!ticketType) {
-          throw new NotFoundException(`Ticket type ${item.ticketTypeId} not found`);
+        if (!ticketType) throw new NotFoundException(`Ticket type ${item.ticketTypeId} not found`);
+
+        // FIX: isOnSale getter doesn't work on plain TypeORM objects — check fields directly
+        if (!this.isTicketTypeOnSale(ticketType)) {
+          throw new BadRequestException(`Ticket type "${ticketType.name}" is not currently on sale`);
         }
 
-        if (!ticketType.isOnSale) {
-          throw new BadRequestException(`Ticket type ${ticketType.name} is not on sale`);
-        }
-
-        if (ticketType.availableQuantity < item.quantity) {
+        const available = ticketType.quantityAvailable - ticketType.quantitySold;
+        if (available < item.quantity) {
           throw new BadRequestException(
-            `Insufficient tickets available for ${ticketType.name}. Available: ${ticketType.availableQuantity}`,
+            `Only ${available} ticket(s) left for "${ticketType.name}"`,
           );
         }
 
-        const itemTotal = ticketType.price * item.quantity;
+        const itemTotal = Number(ticketType.price) * item.quantity;
         subtotal += itemTotal;
 
-        // Create order item
-        const orderItem = queryRunner.manager.create(OrderItem, {
+        orderItemDrafts.push({
           ticketTypeId: ticketType.id,
           quantity: item.quantity,
-          unitPrice: ticketType.price,
+          unitPrice: Number(ticketType.price),
           totalPrice: itemTotal,
         });
-        orderItems.push(orderItem);
       }
 
-      // Calculate totals with commissions
       const venueFeePercentage =
-        event.venueFeeType === 'percentage' ? event.venueFeePercentage : null;
-      const venueFeeFixed = event.venueFeeType === 'fixed' ? event.venueFeeAmount : null;
+        event.venueFeeType === 'percentage' ? Number(event.venueFeePercentage) : null;
+      const venueFeeFixed =
+        event.venueFeeType === 'fixed' ? Number(event.venueFeeAmount) : null;
       const totals = this.calculateOrderTotals(subtotal, venueFeePercentage, venueFeeFixed);
 
       // Create order
@@ -280,7 +174,7 @@ export class TicketsService {
         eventId,
         orderNumber: this.generateOrderNumber(),
         totalAmount: totals.total,
-        currency: Currency.KES, // Default to KES, can be made dynamic
+        currency: Currency.KES,
         platformCommissionPercentage: this.PLATFORM_COMMISSION_PERCENTAGE,
         platformCommissionAmount: totals.platformCommission,
         venueFeeAmount: totals.venueFee,
@@ -291,26 +185,25 @@ export class TicketsService {
 
       const savedOrder = await queryRunner.manager.save(Order, order);
 
-      // Link order items to order
-      orderItems.forEach((item) => {
-        item.orderId = savedOrder.id;
-      });
-      await queryRunner.manager.save(OrderItem, orderItems);
+      // Save order items
+      const savedOrderItems = orderItemDrafts.map((oi) => ({
+        ...oi,
+        orderId: savedOrder.id,
+      }));
+      await queryRunner.manager.save(OrderItem, savedOrderItems);
 
-      // Create tickets and update ticket type quantities
-      const tickets: Ticket[] = [];
+      // Create tickets + update sold counts
+      const ticketDrafts: Partial<Ticket>[] = [];
+
       for (const item of items) {
-        const ticketType = ticketTypes.find((tt) => tt.id === item.ticketTypeId);
-
-        // Update ticket type sold count
+        const ticketType = ticketTypes.find((tt) => tt.id === item.ticketTypeId)!;
         ticketType.quantitySold += item.quantity;
         await queryRunner.manager.save(TicketType, ticketType);
 
         for (let i = 0; i < item.quantity; i++) {
           const tempTicketId = crypto.randomUUID();
           const { qrCode, qrCodeHash } = this.generateQRPayload(tempTicketId, eventId);
-
-          const ticket = queryRunner.manager.create(Ticket, {
+          ticketDrafts.push({
             id: tempTicketId,
             userId,
             eventId,
@@ -320,16 +213,12 @@ export class TicketsService {
             qrCodeHash,
             status: TicketStatus.ACTIVE,
           });
-
-          tickets.push(ticket);
         }
       }
 
-      await queryRunner.manager.save(Ticket, tickets);
-
+      await queryRunner.manager.save(Ticket, ticketDrafts);
       await queryRunner.commitTransaction();
 
-      // Return order with relations
       return this.orderRepository.findOne({
         where: { id: savedOrder.id },
         relations: ['orderItems', 'orderItems.ticketType', 'tickets', 'event'],
@@ -342,9 +231,8 @@ export class TicketsService {
     }
   }
 
-  /**
-   * Get user's tickets
-   */
+  // ─── Tickets ──────────────────────────────────────────────────────────────
+
   async getUserTickets(userId: string): Promise<Ticket[]> {
     return this.ticketRepository.find({
       where: { userId },
@@ -353,19 +241,13 @@ export class TicketsService {
     });
   }
 
-  /**
-   * Get ticket by ID with QR code
-   */
   async getTicketById(ticketId: string, userId: string): Promise<Ticket> {
     const ticket = await this.ticketRepository.findOne({
       where: { id: ticketId },
       relations: ['event', 'ticketType', 'order', 'user'],
     });
 
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
+    if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.userId !== userId) {
       throw new ForbiddenException('You do not have permission to view this ticket');
     }
@@ -373,10 +255,8 @@ export class TicketsService {
     return ticket;
   }
 
-  /**
-   * Check in a ticket at the door by verifying the scanned QR payload.
-   * Only the organizer who owns the event may perform check-in.
-   */
+  // ─── Check-In ─────────────────────────────────────────────────────────────
+
   async checkIn(
     qrCodeRaw: string,
     organizerUserId: string,
@@ -393,6 +273,12 @@ export class TicketsService {
       throw new BadRequestException('Incomplete QR code data');
     }
 
+    // Validate signature length before timingSafeEqual (prevents crashes on wrong-length input)
+    const expectedLength = 64; // SHA-256 hex = 64 chars
+    if (signature.length !== expectedLength) {
+      throw new BadRequestException('QR code signature is invalid — possible forgery');
+    }
+
     if (!this.verifyQRPayload(ticketId, eventId, signature)) {
       throw new BadRequestException('QR code signature is invalid — possible forgery');
     }
@@ -402,25 +288,17 @@ export class TicketsService {
       relations: ['event', 'event.organizer', 'ticketType'],
     });
 
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    if (ticket.eventId !== eventId) {
-      throw new BadRequestException('QR code event mismatch');
-    }
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.eventId !== eventId) throw new BadRequestException('QR code event mismatch');
 
     const organizer = ticket.event?.organizer;
     if (!organizer || organizer.userId !== organizerUserId) {
-      throw new ForbiddenException(
-        'You are not the organizer of this event',
-      );
+      throw new ForbiddenException('You are not the organizer of this event');
     }
 
     if (ticket.status === TicketStatus.USED) {
       throw new BadRequestException('Ticket already scanned');
     }
-
     if (ticket.status !== TicketStatus.ACTIVE) {
       throw new BadRequestException(
         `Ticket cannot be checked in — status is "${ticket.status}"`,
@@ -432,16 +310,11 @@ export class TicketsService {
     ticket.checkedInById = organizer.id;
     await this.ticketRepository.save(ticket);
 
-    return {
-      success: true,
-      ticket,
-      message: 'Check-in successful',
-    };
+    return { success: true, ticket, message: 'Check-in successful' };
   }
 
-  /**
-   * Transfer ticket to another user
-   */
+  // ─── Transfer & Gift ──────────────────────────────────────────────────────
+
   async transferTicket(
     ticketId: string,
     userId: string,
@@ -452,44 +325,33 @@ export class TicketsService {
       relations: ['event'],
     });
 
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
+    if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.userId !== userId) {
       throw new ForbiddenException('You do not have permission to transfer this ticket');
     }
-
     if (ticket.status !== TicketStatus.ACTIVE) {
       throw new BadRequestException('Only active tickets can be transferred');
     }
-
     if (ticket.isTransferred) {
       throw new BadRequestException('This ticket has already been transferred');
     }
-
-    // Check if event has passed
     if (new Date() > ticket.event.endDate) {
       throw new BadRequestException('Cannot transfer ticket for past events');
     }
 
-    // Create transfer record
     const transfer = this.ticketTransferRepository.create({
       ticketId,
       originalUserId: userId,
       transferType: TransferType.TRANSFER,
       recipientEmail: transferDto.recipientEmail,
       message: transferDto.message,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       transferStatus: TransferStatus.PENDING,
     });
 
     return this.ticketTransferRepository.save(transfer);
   }
 
-  /**
-   * Gift ticket to another user
-   */
   async giftTicket(
     ticketId: string,
     userId: string,
@@ -500,49 +362,40 @@ export class TicketsService {
       relations: ['event'],
     });
 
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
+    if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.userId !== userId) {
       throw new ForbiddenException('You do not have permission to gift this ticket');
     }
-
     if (ticket.status !== TicketStatus.ACTIVE) {
       throw new BadRequestException('Only active tickets can be gifted');
     }
 
-    // Create transfer record
     const transfer = this.ticketTransferRepository.create({
       ticketId,
       originalUserId: userId,
       transferType: TransferType.GIFT,
       recipientEmail: giftDto.recipientEmail,
       message: giftDto.message,
-      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       transferStatus: TransferStatus.PENDING,
     });
 
     return this.ticketTransferRepository.save(transfer);
   }
 
-  /**
-   * Join waitlist for sold-out event
-   */
+  // ─── Waitlist ─────────────────────────────────────────────────────────────
+
   async joinWaitlist(userId: string, waitlistDto: JoinWaitlistDto): Promise<Waitlist> {
     const { eventId, ticketTypeId, quantity = 1 } = waitlistDto;
 
     const event = await this.eventRepository.findOne({ where: { id: eventId } });
-    if (!event) {
-      throw new NotFoundException('Event not found');
-    }
+    if (!event) throw new NotFoundException('Event not found');
 
-    // Check if already on waitlist
     const existing = await this.waitlistRepository.findOne({
       where: {
         userId,
         eventId,
-        ticketTypeId: ticketTypeId || null,
+        ticketTypeId: ticketTypeId ?? null,
         status: WaitlistStatus.ACTIVE,
       },
     });
@@ -562,9 +415,6 @@ export class TicketsService {
     return this.waitlistRepository.save(waitlist);
   }
 
-  /**
-   * Get user's waitlist entries
-   */
   async getUserWaitlist(userId: string): Promise<Waitlist[]> {
     return this.waitlistRepository.find({
       where: { userId },
@@ -573,22 +423,12 @@ export class TicketsService {
     });
   }
 
-  /**
-   * Cancel / leave a waitlist entry
-   */
   async cancelWaitlistEntry(userId: string, waitlistId: string): Promise<Waitlist> {
-    const entry = await this.waitlistRepository.findOne({
-      where: { id: waitlistId },
-    });
-
-    if (!entry) {
-      throw new NotFoundException('Waitlist entry not found');
-    }
-
+    const entry = await this.waitlistRepository.findOne({ where: { id: waitlistId } });
+    if (!entry) throw new NotFoundException('Waitlist entry not found');
     if (entry.userId !== userId) {
       throw new ForbiddenException('You do not have permission to modify this waitlist entry');
     }
-
     if (entry.status !== WaitlistStatus.ACTIVE) {
       throw new BadRequestException('Only active waitlist entries can be cancelled');
     }
@@ -597,9 +437,8 @@ export class TicketsService {
     return this.waitlistRepository.save(entry);
   }
 
-  /**
-   * Create refund request
-   */
+  // ─── Refunds ──────────────────────────────────────────────────────────────
+
   async createRefundRequest(
     ticketId: string,
     userId: string,
@@ -610,31 +449,20 @@ export class TicketsService {
       relations: ['event', 'order', 'ticketType'],
     });
 
-    if (!ticket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
+    if (!ticket) throw new NotFoundException('Ticket not found');
     if (ticket.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to request refund for this ticket');
+      throw new ForbiddenException('You do not have permission to request a refund for this ticket');
     }
-
     if (ticket.status !== TicketStatus.ACTIVE) {
       throw new BadRequestException('Only active tickets can be refunded');
     }
-
-    // Check if event has passed
     if (new Date() > ticket.event.endDate) {
       throw new BadRequestException('Cannot request refund for past events');
     }
 
-    // Check if already has pending refund request
     const existingRequest = await this.refundRequestRepository.findOne({
-      where: {
-        ticketId,
-        status: RefundStatus.PENDING,
-      },
+      where: { ticketId, status: RefundStatus.PENDING },
     });
-
     if (existingRequest) {
       throw new BadRequestException('You already have a pending refund request for this ticket');
     }
@@ -644,10 +472,101 @@ export class TicketsService {
       userId,
       eventId: ticket.eventId,
       reason: refundDto.reason,
-      refundAmount: ticket.ticketType.price,
+      refundAmount: Number(ticket.ticketType.price),
       status: RefundStatus.PENDING,
     });
 
     return this.refundRequestRepository.save(refundRequest);
+  }
+
+  // ─── QR Code Helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Generate a cryptographically signed QR payload.
+   */
+  generateQRPayload(ticketId: string, eventId: string): {
+    qrCode: string;
+    qrCodeHash: string;
+  } {
+    const secret =
+      this.configService.get<string>('QR_HMAC_SECRET') ?? 'tplat-qr-default-secret';
+    const message = `${ticketId}:${eventId}`;
+    const hmac = crypto.createHmac('sha256', secret).update(message).digest('hex');
+    const qrCode = JSON.stringify({ t: ticketId, e: eventId, sig: hmac });
+    return { qrCode, qrCodeHash: hmac };
+  }
+
+  /**
+   * Verify a QR payload signature using timing-safe comparison.
+   */
+  verifyQRPayload(ticketId: string, eventId: string, signature: string): boolean {
+    try {
+      const secret =
+        this.configService.get<string>('QR_HMAC_SECRET') ?? 'tplat-qr-default-secret';
+      const expected = crypto
+        .createHmac('sha256', secret)
+        .update(`${ticketId}:${eventId}`)
+        .digest('hex');
+
+      const expectedBuf = Buffer.from(expected, 'hex');
+      const actualBuf = Buffer.from(signature, 'hex');
+
+      if (expectedBuf.length !== actualBuf.length) return false;
+      return crypto.timingSafeEqual(expectedBuf, actualBuf);
+    } catch {
+      return false;
+    }
+  }
+
+  // ─── Private Helpers ──────────────────────────────────────────────────────
+
+  /**
+   * FIX: TypeORM returns plain objects, not class instances, so getters like
+   * `isOnSale` on the entity class are not available. Check fields directly.
+   */
+  private isTicketTypeOnSale(tt: TicketType): boolean {
+    if (!tt.isActive) return false;
+    const now = new Date();
+    if (tt.saleStartDate && now < new Date(tt.saleStartDate)) return false;
+    if (tt.saleEndDate && now > new Date(tt.saleEndDate)) return false;
+    return true;
+  }
+
+  private mapTicketTypeToDto(tt: TicketType) {
+    return {
+      id: tt.id,
+      eventId: tt.eventId,
+      name: tt.name,
+      description: tt.description,
+      price: Number(tt.price),
+      currency: tt.currency,
+      quantityAvailable: tt.quantityAvailable,
+      quantitySold: tt.quantitySold,
+      availableQuantity: tt.quantityAvailable - tt.quantitySold,
+      isActive: tt.isActive,
+      isOnSale: this.isTicketTypeOnSale(tt),
+      saleStartDate: tt.saleStartDate,
+      saleEndDate: tt.saleEndDate,
+    };
+  }
+
+  private generateOrderNumber(): string {
+    const timestamp = Date.now().toString(36).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `ORD-${timestamp}-${random}`;
+  }
+
+  private calculateOrderTotals(
+    subtotal: number,
+    venueFeePercentage?: number | null,
+    venueFeeFixed?: number | null,
+  ) {
+    const platformCommission = (subtotal * this.PLATFORM_COMMISSION_PERCENTAGE) / 100;
+    const venueFee = venueFeePercentage
+      ? (subtotal * venueFeePercentage) / 100
+      : venueFeeFixed ?? 0;
+    const total = subtotal + platformCommission;
+    const netAmount = subtotal - venueFee;
+    return { subtotal, platformCommission, venueFee, total, netAmount };
   }
 }
